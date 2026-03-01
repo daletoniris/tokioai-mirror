@@ -18,6 +18,7 @@
 [![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://docker.com)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue?style=for-the-badge)](LICENSE)
 [![Telegram Bot](https://img.shields.io/badge/Telegram-Bot-26A5E4?style=for-the-badge&logo=telegram&logoColor=white)](#telegram-bot)
+[![Website](https://img.shields.io/badge/tokioia.com-000000?style=for-the-badge&logo=globe&logoColor=white)](https://tokioia.com)
 
 <br>
 
@@ -661,11 +662,13 @@ pytest tests/ -v
 
 ## 📜 License
 
-GPL v3 — See [LICENSE](LICENSE) for details.
+GPL v3 — Copyright (c) 2026 TokioAI Security Research, Inc. See [LICENSE](LICENSE) for details.
 
 ---
 
 ## 👤 Author
+
+A project by **[TokioAI Security Research, Inc.](https://tokioia.com)**
 
 Built by **[MrMoz](https://github.com/TokioAI)** — Security architect, hacker, builder.
 
@@ -677,8 +680,8 @@ If you find it useful, drop a star. If you break it, open an issue. If you impro
 
 <div align="center">
 
-**TokioAI — Self-hosted AI that executes.**
+**[TokioAI Security Research, Inc.](https://tokioia.com)**
 
-*Not a chatbot. An agent.*
+*Self-hosted AI that executes. Not a chatbot — an agent.*
 
 </div>
