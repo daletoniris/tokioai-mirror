@@ -246,7 +246,9 @@ All configuration is via environment variables. Copy `.env.example` to `.env` an
 | `ANTHROPIC_API_KEY` | Claude API key (or use Vertex AI) |
 | `POSTGRES_PASSWORD` | PostgreSQL password |
 
-### LLM via Vertex AI (for Claude on GCP)
+### LLM via Vertex AI (optional — for Claude on GCP)
+
+> Only needed if you prefer using Claude through Google Cloud instead of the direct Anthropic API.
 
 | Variable | Description |
 |:---------|:------------|
@@ -370,7 +372,23 @@ Blocks dangerous commands **before** tool execution:
 
 ---
 
-## 🌐 WAF Dashboard
+## 🚢 Deployment Modes
+
+The setup wizard (`tokio setup`) lets you choose how to deploy:
+
+| Mode | What runs locally | What runs in cloud | Best for |
+|:-----|:------------------|:-------------------|:---------|
+| **1. Full Local** (default) | Everything — CLI, API, Telegram bot, PostgreSQL | Nothing | Development, testing, personal use |
+| **2. Hybrid** | TokioAI CLI + tools | WAF, Kafka, PostgreSQL on GCP | Production with local agent control |
+| **3. Full Cloud** | Nothing | Everything in GCP | Headless servers, max availability |
+
+> **Note:** Mode 1 is the default and works perfectly without any cloud account. The WAF/GCP modules (`tokio_cloud/`) are entirely optional — the core agent, CLI, API, and Telegram bot work 100% standalone.
+
+---
+
+## 🌐 WAF Dashboard (Optional)
+
+> **This section is optional.** The core TokioAI agent works perfectly without the WAF. Deploy the WAF only if you want to protect a web application with real-time attack detection.
 
 TokioAI includes a complete **Web Application Firewall** with a cyberpunk-themed SOC dashboard.
 
@@ -438,16 +456,22 @@ TokioAI includes a complete **Web Application Firewall** with a cyberpunk-themed
 | **Attack Heatmap** | Hour-of-day × Day-of-week threat visualization |
 | **CSV Export** | Export filtered logs for analysis |
 
-### WAF Deployment
+### WAF Deployment (Optional)
+
+The WAF can be deployed on any machine (local, VPS, or GCP VM):
 
 ```bash
 cd tokio_cloud/gcp-live
 cp .env.example .env
-# Edit .env with your passwords
+# Edit .env — set your domain, backend IP, and passwords
+nano .env
+
 docker compose up -d
 ```
 
 Deploys **7 containers**: PostgreSQL, Zookeeper, Kafka, Nginx WAF proxy, Log processor, Realtime attack detector, SOC Dashboard API.
+
+> **Requirements:** A server with Docker, a domain pointing to it, and a backend to protect. No GCP account required — works on any VPS or local machine.
 
 ---
 
@@ -579,7 +603,7 @@ tokioai/
 │               ├── host_tools.py      #   SSH remote control
 │               ├── iot_tools.py       #   Home Assistant
 │               └── ...                #   + 10 more tool files
-├── tokio_cloud/                       # WAF deployment (optional)
+├── tokio_cloud/                       # ⚡ WAF deployment (100% OPTIONAL)
 │   ├── gcp-live/                      # Production WAF stack
 │   │   ├── docker-compose.yml         #   7-container stack
 │   │   ├── dashboard-app.py           #   SOC dashboard (1385 lines)
