@@ -1,0 +1,21 @@
+FROM python:3.12-slim
+
+LABEL maintainer="TokioAI"
+LABEL component="telegram-bot"
+
+WORKDIR /app
+
+# ffmpeg for voice message conversion
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Prefer IPv4 (reduces sporadic Telegram API timeouts)
+RUN printf '%s\n' 'precedence ::ffff:0:0/96  100' > /etc/gai.conf
+
+COPY requirements.telegram.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY telegram_bot.py /app/
+
+CMD ["python", "telegram_bot.py"]

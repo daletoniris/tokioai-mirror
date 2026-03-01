@@ -1,0 +1,37 @@
+# TokioAI Agent v2.0 — Dependencies
+# Core
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+pydantic>=2.9.0
+python-dotenv>=1.0.0
+
+# LLM Providers
+anthropic[vertex]>=0.43.0
+openai>=1.60.0
+google-generativeai>=0.8.0
+
+# Database
+psycopg2-binary>=2.9.9
+
+# HTTP
+aiohttp>=3.10.0
+httpx>=0.27.0
+
+# Docker
+docker>=7.1.0
+
+# Document generation
+fpdf2>=2.8.0
+python-pptx>=1.0.0
+PyPDF2>=3.0.0
+
+# Multimedia
+yt-dlp>=2024.1.0
+
+# Utilities
+pyyaml>=6.0
+rich>=13.9.0
+
+# Testing
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
