@@ -70,6 +70,16 @@ async def _interactive_session():
         on_tool_end=lambda name, result: None,
     )
 
+    # Validate LLM is configured
+    if not agent.llm.is_available():
+        print("\n⚠️  No LLM provider configured!")
+        print("   Edit .env and set at least one of:")
+        print("   - ANTHROPIC_API_KEY=sk-ant-...")
+        print("   - OPENAI_API_KEY=sk-...")
+        print("   - GEMINI_API_KEY=...")
+        print("   Or run: tokio setup\n")
+        return
+
     session_id = agent.session_manager.create_session()
 
     user_name = agent.workspace.get_preference("user_name")
