@@ -177,26 +177,43 @@ Full multimedia support:
 
 ## 🚀 Quick Start
 
-### Option 1: Setup Wizard (recommended)
+### Option 1: Docker (easiest)
 
 ```bash
 git clone https://github.com/TokioAI/tokioai-v1.8.git tokioai
 cd tokioai
+cp .env.example .env
+
+# Edit .env — set at least ANTHROPIC_API_KEY (or OPENAI_API_KEY or GEMINI_API_KEY)
+nano .env
+
+docker compose up -d
+```
+
+This starts 3 containers: **PostgreSQL**, **TokioAI API** (port 8200), and **Telegram bot** (if configured).
+
+### Option 2: Setup Wizard
+
+```bash
+git clone https://github.com/TokioAI/tokioai-v1.8.git tokioai
+cd tokioai
+python3 -m venv venv && source venv/bin/activate
 pip install -e .
 tokio setup
 ```
 
 > The wizard walks you through LLM provider, database, Telegram, and optional features — then generates `.env` and `docker-compose.yml`.
 
-### Option 2: Manual Setup
+### Option 3: Manual Setup
 
 ```bash
 git clone https://github.com/TokioAI/tokioai-v1.8.git tokioai
 cd tokioai
 
 cp .env.example .env
-# Edit .env with your API keys
+# Edit .env — set your API key
 
+python3 -m venv venv && source venv/bin/activate
 pip install -e .
 
 # Interactive CLI
@@ -206,20 +223,14 @@ tokio
 tokio server
 ```
 
-### Option 3: Docker
+### CLI Commands
 
 ```bash
-git clone https://github.com/TokioAI/tokioai-v1.8.git tokioai
-cd tokioai
-cp .env.example .env
-# Edit .env
-
-docker compose up -d
+tokio              # Interactive chat session
+tokio server       # Start REST API server
+tokio setup        # Run setup wizard
+tokio "message"    # Single message mode (non-interactive)
 ```
-
-This starts:
-- `tokio-cli` — API server on port 8200
-- `tokio-telegram` — Telegram bot (if configured)
 
 ---
 
