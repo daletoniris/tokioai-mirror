@@ -19,6 +19,21 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+
+def _find_project_root() -> str:
+    """Find the TokioAI project root (where Dockerfile and pyproject.toml live)."""
+    # Try relative to this file first
+    this_file = Path(__file__).resolve()
+    candidate = this_file.parent.parent  # tokio_agent/ -> project root
+    if (candidate / "Dockerfile").exists():
+        return str(candidate)
+    # Try current working directory
+    cwd = Path.cwd()
+    if (cwd / "Dockerfile").exists():
+        return str(cwd)
+    # Fallback to "." (user should run from project dir)
+    return "."
+
 BANNER = r"""
  ______     __  __     __     ______     __  __     __
 /\__  _\   /\ \/\ \   /\ \   /\  ___\   /\ \/\ \   /\ \
@@ -579,7 +594,11 @@ def _generate_env(config: Dict[str, str], path: Path) -> None:
         section_lines = []
         for key in keys:
             if key in config and config[key]:
-                section_lines.append(f"{key}={config[key]}")
+                val = config[key]
+                # Quote values that contain special characters
+                if any(c in str(val) for c in (' ', '#', '$', '"', "'", '\\', '&', '|')):
+                    val = f'"{val}"'
+                section_lines.append(f"{key}={val}")
         if section_lines:
             lines.append(section_header)
             lines.extend(section_lines)
@@ -600,11 +619,14 @@ def _generate_compose(config: Dict[str, str], path: Path, deploy: str,
     pg_host = config.get("POSTGRES_HOST", "postgres")
     is_local_pg = pg_host in ("postgres", "localhost", "127.0.0.1")
 
+    # Find the project root (where Dockerfile lives)
+    project_root = _find_project_root()
+
     compose = {"services": {}}
 
     # Tokio CLI service
     cli_service = {
-        "build": {"context": ".", "dockerfile": "Dockerfile"},
+        "build": {"context": project_root, "dockerfile": "Dockerfile"},
         "container_name": "tokio-cli",
         "env_file": ".env",
         "ports": [f"{config.get('TOKIO_PORT', '8000')}:8000"],
@@ -631,7 +653,7 @@ def _generate_compose(config: Dict[str, str], path: Path, deploy: str,
     if features.get("telegram"):
         compose["services"]["tokio-telegram"] = {
             "build": {
-                "context": "./tokio_agent/bots",
+                "context": os.path.join(project_root, "tokio_agent", "bots"),
                 "dockerfile": "Dockerfile.telegram",
             },
             "container_name": "tokio-telegram",
