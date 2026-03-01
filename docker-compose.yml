@@ -1,26 +1,45 @@
 # TokioAI v2.0 — Docker Compose
-# PostgreSQL runs on GCP (external), no local DB needed.
-# Usage: docker compose up -d
+# Usage: cp .env.example .env && edit .env && docker compose up -d
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: tokio-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-tokio}
+      POSTGRES_USER: ${POSTGRES_USER:-tokio}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tokio}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   tokio-cli:
     build: .
     container_name: tokio-cli
     env_file: .env
+    environment:
+      - POSTGRES_HOST=postgres
     ports:
-      - "8200:8000"
+      - "${TOKIO_PORT:-8200}:8000"
     volumes:
       - tokio-workspace:/workspace
       - /var/run/docker.sock:/var/run/docker.sock
-      - .:/app/src:rw
-      # Vertex AI credentials (mount your GCP service account JSON)
+      # Vertex AI credentials (optional — mount your GCP service account JSON)
       # - /path/to/your-vertex-sa.json:/app/vertex-credentials.json:ro
-      # GCP infra service account (optional)
-      # - /path/to/gcp-sa-key.json:/app/gcp-sa-key.json:ro
-      # SSH keys for host and router control (optional)
+      # SSH keys for host/router control (optional)
       # - ~/.ssh/id_ed25519:/root/.ssh/id_ed25519:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -43,6 +62,9 @@ services:
     volumes:
       - tokio-workspace:/workspace
     restart: unless-stopped
+    # Only starts if TELEGRAM_BOT_TOKEN is set in .env
+    # To disable: docker compose up -d tokio-cli postgres
 
 volumes:
+  pgdata:
   tokio-workspace:
