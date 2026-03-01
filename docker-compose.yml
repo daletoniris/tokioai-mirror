@@ -1,0 +1,48 @@
+# TokioAI v2.0 — Docker Compose
+# PostgreSQL runs on GCP (external), no local DB needed.
+# Usage: docker compose up -d
+
+services:
+  tokio-cli:
+    build: .
+    container_name: tokio-cli
+    env_file: .env
+    ports:
+      - "8200:8000"
+    volumes:
+      - tokio-workspace:/workspace
+      - /var/run/docker.sock:/var/run/docker.sock
+      - .:/app/src:rw
+      # Vertex AI credentials (mount your GCP service account JSON)
+      # - /path/to/your-vertex-sa.json:/app/vertex-credentials.json:ro
+      # GCP infra service account (optional)
+      # - /path/to/gcp-sa-key.json:/app/gcp-sa-key.json:ro
+      # SSH keys for host and router control (optional)
+      # - ~/.ssh/id_ed25519:/root/.ssh/id_ed25519:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+
+  tokio-telegram:
+    build:
+      context: ./tokio_agent/bots
+      dockerfile: Dockerfile.telegram
+    container_name: tokio-telegram
+    env_file: .env
+    environment:
+      - CLI_SERVICE_URL=http://tokio-cli:8000
+    depends_on:
+      tokio-cli:
+        condition: service_healthy
+    volumes:
+      - tokio-workspace:/workspace
+    restart: unless-stopped
+
+volumes:
+  tokio-workspace:

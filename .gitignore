@@ -1,0 +1,38 @@
+# Environment and secrets
+.env
+.env.local
+.env.production
+*.pem
+*.key
+*.json.key
+sa.json
+vertex-credentials.json
+credentials/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Workspace data (user-specific)
+workspace/sessions/
+workspace/plugins/

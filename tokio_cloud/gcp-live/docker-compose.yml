@@ -1,0 +1,154 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: tokio-gcp-postgres
+    environment:
+      POSTGRES_DB: tokio
+      POSTGRES_USER: tokio
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/001_init.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tokio"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: tokio-gcp-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    restart: unless-stopped
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: tokio-gcp-kafka
+    depends_on: [zookeeper]
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    restart: unless-stopped
+
+  waf-proxy:
+    image: nginx:alpine
+    container_name: tokio-gcp-waf-proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/ssl:ro
+      - modsec_logs:/var/log/nginx
+      - blocklist_data:/etc/nginx/blocklist_dir
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        cp /etc/nginx/blocklist_dir/blocked.conf /etc/nginx/blocklist.conf 2>/dev/null || echo '# empty' > /etc/nginx/blocklist.conf
+        nginx -g 'daemon off;' &
+        NGINX_PID=$$!
+        LAST_HASH=""
+        while true; do
+          sleep 5
+          if [ -f /etc/nginx/blocklist_dir/blocked.conf ]; then
+            NEW_HASH=$$(md5sum /etc/nginx/blocklist_dir/blocked.conf 2>/dev/null | awk '{print $$1}')
+            if [ "$$NEW_HASH" != "$$LAST_HASH" ]; then
+              cp /etc/nginx/blocklist_dir/blocked.conf /etc/nginx/blocklist.conf
+              nginx -s reload 2>/dev/null && echo "[waf-blocklist] Reloaded - hash: $$NEW_HASH"
+              LAST_HASH="$$NEW_HASH"
+            fi
+          fi
+        done
+    depends_on: [kafka]
+    restart: unless-stopped
+
+  log-processor:
+    image: python:3.11-slim
+    container_name: tokio-gcp-log-processor
+    volumes:
+      - modsec_logs:/logs:ro
+      - ./log-processor.py:/app/log-processor.py:ro
+    working_dir: /app
+    command: bash -c "pip install kafka-python && python3 -u log-processor.py"
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TOPIC_WAF_LOGS: waf-logs
+      MODSEC_LOG_PATH: /logs/waf-access.log
+      PYTHONUNBUFFERED: "1"
+    depends_on: [waf-proxy, kafka]
+    restart: on-failure
+
+  realtime-processor:
+    image: python:3.11-slim
+    container_name: tokio-gcp-realtime-processor
+    volumes:
+      - ./realtime-processor.py:/app/realtime-processor.py:ro
+      - blocklist_data:/blocklist
+    working_dir: /app
+    command: bash -c "pip install kafka-python psycopg2-binary requests && python3 -u realtime-processor.py"
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TOPIC_WAF_LOGS: waf-logs
+      KAFKA_CONSUMER_GROUP: gcp-realtime-group
+      PYTHONUNBUFFERED: "1"
+      BLOCK_THRESHOLD: "40"
+      BLOCK_WINDOW_SEC: "300"
+      RATE_BLOCK_THRESHOLD: "40"
+      SIG_BLOCK_THRESHOLD: "2"
+      EPISODE_MIN_REQUESTS: "2"
+      EPISODE_WINDOW_SEC: "600"
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: tokio
+      POSTGRES_USER: tokio
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      BLOCKLIST_PATH: /blocklist/blocked.conf
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_OWNER_CHAT_ID: ${TELEGRAM_OWNER_CHAT_ID:-}
+    depends_on: [postgres, kafka]
+    restart: on-failure
+
+  dashboard-api:
+    image: python:3.11-slim
+    container_name: tokio-gcp-dashboard-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./dashboard-app.py:/app/app.py:ro
+      - ./dashboard-db.py:/app/db.py:ro
+      - ./geoip_helper.py:/app/geoip_helper.py:ro
+      - blocklist_data:/blocklist
+      - geoip_data:/app/geoip
+    working_dir: /app
+    command: bash -c "pip install fastapi uvicorn psycopg2-binary pydantic PyJWT aiofiles && uvicorn app:app --host 0.0.0.0 --port 8000"
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: tokio
+      POSTGRES_USER: tokio
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      DASHBOARD_USER: ${DASHBOARD_USER:-admin}
+      DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD:-changeme}
+      JWT_SECRET: ${JWT_SECRET:-changeme}
+      PYTHONUNBUFFERED: "1"
+      BLOCKLIST_PATH: /blocklist/blocked.conf
+      ABUSEIPDB_API_KEY: ${ABUSEIPDB_API_KEY:-}
+      GEOIP_DB_PATH: /app/geoip
+    depends_on: [postgres]
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  modsec_logs:
+  blocklist_data:
+  geoip_data:
