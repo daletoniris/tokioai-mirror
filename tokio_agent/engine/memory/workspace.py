@@ -41,8 +41,9 @@ class Workspace:
         self._pg_dsn = pg_dsn or self._build_pg_dsn()
         self._pg_conn = None
 
-        # In-memory cache
+        # In-memory cache (per-user: keyed by user_id)
         self._preferences: Dict[str, str] = {}
+        self._user_preferences: Dict[str, Dict[str, str]] = {}
         self._memory_entries: List[str] = []
 
         # Initialize
@@ -69,32 +70,71 @@ class Workspace:
             return self._memory_path.read_text()
         return ""
 
-    def add_memory(self, entry: str) -> None:
-        """Add a new memory entry."""
+    def add_memory(self, entry: str, user_id: str = "") -> None:
+        """Add a new memory entry. If user_id provided, store per-user."""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
         line = f"- [{timestamp}] {entry}"
         self._memory_entries.append(line)
 
-        # Append to file
+        # Append to file (global memory)
         with open(self._memory_path, "a") as f:
             f.write(line + "\n")
 
-        # Also persist to PostgreSQL
-        self._pg_save_memory(entry)
+        # Also persist to PostgreSQL (per-user if user_id provided)
+        self._pg_save_memory(entry, user_id)
 
-    def search_memory(self, query: str) -> List[str]:
+    def get_user_memory(self, user_id: str) -> str:
+        """Get memory entries for a specific user."""
+        conn = self._get_pg()
+        if not conn:
+            return ""
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT entry, created_at FROM tokio_user_memory WHERE user_id = %s ORDER BY id DESC LIMIT 30",
+                (user_id,),
+            )
+            rows = cur.fetchall()
+            if rows:
+                lines = [f"- [{r[1].strftime('%Y-%m-%d %H:%M')}] {r[0]}" for r in reversed(rows)]
+                return "\n".join(lines)
+        except Exception as e:
+            logger.debug(f"Error loading user memory: {e}")
+        return ""
+
+    def search_memory(self, query: str, user_id: str = "") -> List[str]:
         """Search memory for matching entries."""
         query_lower = query.lower()
-        return [
-            e for e in self._memory_entries
-            if query_lower in e.lower()
-        ]
+        results = [e for e in self._memory_entries if query_lower in e.lower()]
+        if user_id:
+            conn = self._get_pg()
+            if conn:
+                try:
+                    cur = conn.cursor()
+                    cur.execute(
+                        "SELECT entry FROM tokio_user_memory WHERE user_id = %s AND entry ILIKE %s LIMIT 20",
+                        (user_id, f"%{query}%"),
+                    )
+                    results.extend([r[0] for r in cur.fetchall()])
+                except Exception:
+                    pass
+        return results
 
-    # ── User Preferences ──
+    # ── User Preferences (per-user isolation) ──
 
-    def get_preference(self, key: str, default: str = "") -> str:
-        """Get a user preference."""
-        # Check in-memory first, then PostgreSQL
+    def get_preference(self, key: str, default: str = "", user_id: str = "") -> str:
+        """Get a user preference. If user_id is provided, get per-user pref."""
+        if user_id:
+            cache = self._user_preferences.get(user_id, {})
+            val = cache.get(key)
+            if val is not None:
+                return val
+            val = self._pg_get_preference(key, user_id)
+            if val is not None:
+                self._user_preferences.setdefault(user_id, {})[key] = val
+                return val
+            return default
+        # Fallback to global (CLI usage)
         val = self._preferences.get(key)
         if val is not None:
             return val
@@ -104,17 +144,23 @@ class Workspace:
             return val
         return default
 
-    def set_preference(self, key: str, value: str) -> None:
-        """Set a user preference."""
-        self._preferences[key] = value
-        self._pg_save_preference(key, value)
+    def set_preference(self, key: str, value: str, user_id: str = "") -> None:
+        """Set a user preference. If user_id is provided, store per-user."""
+        if user_id:
+            self._user_preferences.setdefault(user_id, {})[key] = value
+            self._pg_save_preference(key, value, user_id)
+        else:
+            self._preferences[key] = value
+            self._pg_save_preference(key, value)
 
-    def get_all_preferences(self) -> Dict[str, str]:
-        """Get all user preferences."""
-        # Merge file + pg preferences
+    def get_all_preferences(self, user_id: str = "") -> Dict[str, str]:
+        """Get all user preferences for a specific user."""
+        if user_id:
+            pg_prefs = self._pg_get_all_preferences(user_id)
+            cache = self._user_preferences.get(user_id, {})
+            return {**pg_prefs, **cache}
         pg_prefs = self._pg_get_all_preferences()
-        merged = {**pg_prefs, **self._preferences}
-        return merged
+        return {**pg_prefs, **self._preferences}
 
     # ── Config ──
 
@@ -190,7 +236,30 @@ class Workspace:
                     updated_at TIMESTAMPTZ DEFAULT NOW()
                 )
             """)
-            # Load preferences from PG into cache
+            # Per-user preferences (isolated per Telegram user)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS tokio_user_preferences (
+                    user_id VARCHAR(255) NOT NULL,
+                    key VARCHAR(255) NOT NULL,
+                    value TEXT NOT NULL,
+                    updated_at TIMESTAMPTZ DEFAULT NOW(),
+                    PRIMARY KEY (user_id, key)
+                )
+            """)
+            # Per-user memory (isolated per Telegram user)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS tokio_user_memory (
+                    id SERIAL PRIMARY KEY,
+                    user_id VARCHAR(255) NOT NULL,
+                    entry TEXT NOT NULL,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                )
+            """)
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_user_memory_user_id
+                ON tokio_user_memory (user_id)
+            """)
+            # Load global preferences from PG into cache
             cur.execute("SELECT key, value FROM tokio_preferences")
             for row in cur.fetchall():
                 if row[0] not in self._preferences:
@@ -198,50 +267,76 @@ class Workspace:
         except Exception as e:
             logger.debug(f"Error creating PG tables: {e}")
 
-    def _pg_save_memory(self, entry: str) -> None:
+    def _pg_save_memory(self, entry: str, user_id: str = "") -> None:
         conn = self._get_pg()
         if not conn:
             return
         try:
-            conn.cursor().execute(
-                "INSERT INTO tokio_memory (entry) VALUES (%s)", (entry,)
-            )
+            if user_id:
+                conn.cursor().execute(
+                    "INSERT INTO tokio_user_memory (user_id, entry) VALUES (%s, %s)",
+                    (user_id, entry),
+                )
+            else:
+                conn.cursor().execute(
+                    "INSERT INTO tokio_memory (entry) VALUES (%s)", (entry,)
+                )
         except Exception as e:
             logger.debug(f"Error saving memory to PG: {e}")
 
-    def _pg_save_preference(self, key: str, value: str) -> None:
+    def _pg_save_preference(self, key: str, value: str, user_id: str = "") -> None:
         conn = self._get_pg()
         if not conn:
             return
         try:
-            conn.cursor().execute(
-                """INSERT INTO tokio_preferences (key, value, updated_at)
-                   VALUES (%s, %s, NOW())
-                   ON CONFLICT (key) DO UPDATE SET value = %s, updated_at = NOW()""",
-                (key, value, value),
-            )
+            if user_id:
+                conn.cursor().execute(
+                    """INSERT INTO tokio_user_preferences (user_id, key, value, updated_at)
+                       VALUES (%s, %s, %s, NOW())
+                       ON CONFLICT (user_id, key) DO UPDATE SET value = %s, updated_at = NOW()""",
+                    (user_id, key, value, value),
+                )
+            else:
+                conn.cursor().execute(
+                    """INSERT INTO tokio_preferences (key, value, updated_at)
+                       VALUES (%s, %s, NOW())
+                       ON CONFLICT (key) DO UPDATE SET value = %s, updated_at = NOW()""",
+                    (key, value, value),
+                )
         except Exception as e:
             logger.debug(f"Error saving preference to PG: {e}")
 
-    def _pg_get_preference(self, key: str) -> Optional[str]:
+    def _pg_get_preference(self, key: str, user_id: str = "") -> Optional[str]:
         conn = self._get_pg()
         if not conn:
             return None
         try:
             cur = conn.cursor()
-            cur.execute("SELECT value FROM tokio_preferences WHERE key = %s", (key,))
+            if user_id:
+                cur.execute(
+                    "SELECT value FROM tokio_user_preferences WHERE user_id = %s AND key = %s",
+                    (user_id, key),
+                )
+            else:
+                cur.execute("SELECT value FROM tokio_preferences WHERE key = %s", (key,))
             row = cur.fetchone()
             return row[0] if row else None
         except Exception:
             return None
 
-    def _pg_get_all_preferences(self) -> Dict[str, str]:
+    def _pg_get_all_preferences(self, user_id: str = "") -> Dict[str, str]:
         conn = self._get_pg()
         if not conn:
             return {}
         try:
             cur = conn.cursor()
-            cur.execute("SELECT key, value FROM tokio_preferences")
+            if user_id:
+                cur.execute(
+                    "SELECT key, value FROM tokio_user_preferences WHERE user_id = %s",
+                    (user_id,),
+                )
+            else:
+                cur.execute("SELECT key, value FROM tokio_preferences")
             return {row[0]: row[1] for row in cur.fetchall()}
         except Exception:
             return {}

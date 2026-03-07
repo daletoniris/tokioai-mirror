@@ -133,11 +133,12 @@ class TokioAgent:
         # Record user message
         self.session_manager.add_message(session_id, "user", user_message)
 
-        # Build system prompt
+        # Build system prompt (with per-user isolation)
         system_prompt = build_system_prompt(
             workspace=self.workspace,
             registry=self.registry,
             extra_instructions=self._get_extra_instructions(),
+            session_id=session_id,
         )
 
         # Get conversation history (excludes the message we just added)
@@ -231,8 +232,8 @@ class TokioAgent:
         # Record assistant response
         self.session_manager.add_message(session_id, "assistant", clean_response)
 
-        # Check if user shared their name
-        self._detect_user_info(user_message)
+        # Check if user shared their name (per-user isolated)
+        self._detect_user_info(user_message, session_id)
 
         return clean_response
 
@@ -419,9 +420,14 @@ class TokioAgent:
 
         return args
 
-    def _detect_user_info(self, message: str) -> None:
-        """Detect if the user shared personal info to remember."""
+    def _detect_user_info(self, message: str, session_id: str = "") -> None:
+        """Detect if the user shared personal info to remember (per-user)."""
         lower = message.lower()
+
+        # Extract user_id from session_id
+        user_id = ""
+        if session_id and session_id.startswith("telegram-"):
+            user_id = session_id.replace("telegram-", "")
 
         # Detect name patterns
         name_patterns = [
@@ -432,9 +438,9 @@ class TokioAgent:
             m = re.search(pattern, lower)
             if m:
                 name = m.group(1).capitalize()
-                self.workspace.set_preference("user_name", name)
-                self.workspace.add_memory(f"El usuario se llama {name}")
-                logger.info(f"👤 Detected user name: {name}")
+                self.workspace.set_preference("user_name", name, user_id=user_id)
+                self.workspace.add_memory(f"El usuario se llama {name}", user_id=user_id)
+                logger.info(f"👤 Detected user name: {name} (user_id={user_id})")
                 break
 
     def _get_extra_instructions(self) -> List[str]:
