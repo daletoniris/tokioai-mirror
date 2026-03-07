@@ -19,6 +19,7 @@ def build_system_prompt(
     workspace: Workspace,
     registry: ToolRegistry,
     extra_instructions: Optional[List[str]] = None,
+    session_id: Optional[str] = None,
 ) -> str:
     """Build the complete system prompt.
 
@@ -26,18 +27,24 @@ def build_system_prompt(
         workspace: Agent workspace with identity and memory.
         registry: Tool registry with available tools.
         extra_instructions: Optional additional instructions (skills, etc.).
+        session_id: Session ID for per-user preference/memory isolation.
 
     Returns:
         Complete system prompt string.
     """
     sections = []
 
+    # Extract user_id from session_id (e.g., "telegram-5719110063" -> "5719110063")
+    user_id = ""
+    if session_id and session_id.startswith("telegram-"):
+        user_id = session_id.replace("telegram-", "")
+
     # 1. Identity
     soul = workspace.get_soul()
     sections.append(soul)
 
-    # 2. User preferences
-    prefs = workspace.get_all_preferences()
+    # 2. User preferences (per-user if available)
+    prefs = workspace.get_all_preferences(user_id=user_id)
     if prefs:
         pref_lines = ["# User Preferences"]
         user_name = prefs.get("user_name")
@@ -51,13 +58,17 @@ def build_system_prompt(
                 pref_lines.append(f"- {k}: {v}")
         sections.append("\n".join(pref_lines))
 
-    # 3. Memory context (recent entries)
+    # 3. Memory context (per-user if available, then global)
+    if user_id:
+        user_memory = workspace.get_user_memory(user_id)
+        if user_memory and user_memory.strip():
+            sections.append("# User Memory\n" + user_memory)
     memory = workspace.get_memory()
     if memory and memory.strip():
         lines = memory.strip().splitlines()
         recent = lines[-30:] if len(lines) > 30 else lines
         sections.append(
-            "# Relevant Memory\n" + "\n".join(recent)
+            "# General Memory\n" + "\n".join(recent)
         )
 
     # 4. Available tools
