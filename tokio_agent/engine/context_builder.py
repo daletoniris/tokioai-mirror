@@ -34,7 +34,7 @@ def build_system_prompt(
     """
     sections = []
 
-    # Extract user_id from session_id (e.g., "telegram-5719110063" -> "5719110063")
+    # Extract user_id from session_id (e.g., "telegram-123456" -> "123456")
     user_id = ""
     if session_id and session_id.startswith("telegram-"):
         user_id = session_id.replace("telegram-", "")
