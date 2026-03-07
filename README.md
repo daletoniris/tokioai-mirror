@@ -1,3 +1,10 @@
+<div align="right">
+
+[![en](https://img.shields.io/badge/🇬🇧_English-selected-green?style=flat-square)](README.md)
+[![es](https://img.shields.io/badge/🇦🇷_Español-blue?style=flat-square)](README_ES.md)
+
+</div>
+
 <div align="center">
 
 ```
