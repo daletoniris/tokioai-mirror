@@ -7,7 +7,9 @@
 *.json.key
 sa.json
 vertex-credentials.json
+gcp-sa-key.json
 credentials/
+ssh-keys/
 
 # Python
 __pycache__/

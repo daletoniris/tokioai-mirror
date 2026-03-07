@@ -1,0 +1,71 @@
+# TokioAI v2.0 — Cloud Deployment (GCP / AWS / any VPS)
+#
+# This compose file is designed for cloud deployments where:
+# - PostgreSQL is shared with an existing stack (e.g., WAF/SOC)
+# - Tailscale mesh VPN provides connectivity to local hardware
+# - No ports are exposed publicly — all access via Tailscale or Telegram
+#
+# Prerequisites:
+#   1. External PostgreSQL running on a shared Docker network
+#   2. Tailscale installed on host with subnet routing enabled
+#   3. SSH keys for remote host/router control (optional)
+#   4. Vertex AI or Anthropic API credentials
+#
+# Usage:
+#   cp .env.example .env   # edit with your settings
+#   docker compose -f docker-compose.cloud.yml up -d
+
+services:
+  tokio-cli:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tokio-agent
+    env_file: .env
+    volumes:
+      - tokio-workspace:/workspace
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Mount credentials (adjust paths to your setup)
+      # - /path/to/vertex-credentials.json:/app/vertex-credentials.json:ro
+      # - /path/to/gcp-sa-key.json:/app/gcp-sa-key.json:ro
+      # SSH keys for remote host/router control via Tailscale mesh
+      # - /path/to/ssh-keys/id_ed25519_router:/root/.ssh/id_ed25519_tokio_router:ro
+      # - /path/to/ssh-keys/id_ed25519_host:/root/.ssh/id_ed25519_tokio_host:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - external-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  tokio-telegram:
+    build:
+      context: ./tokio_agent/bots
+      dockerfile: Dockerfile.telegram
+    container_name: tokio-telegram
+    env_file: .env
+    environment:
+      - CLI_SERVICE_URL=http://tokio-agent:8000
+    depends_on:
+      tokio-cli:
+        condition: service_healthy
+    volumes:
+      - tokio-workspace:/workspace
+    networks:
+      - external-net
+    restart: unless-stopped
+
+volumes:
+  tokio-workspace:
+
+networks:
+  external-net:
+    # Connect to your existing Docker network (e.g., from a WAF stack)
+    # Change this name to match your setup
+    external: true
+    name: ${EXTERNAL_NETWORK:-tokio-waf_default}
