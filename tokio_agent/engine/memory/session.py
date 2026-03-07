@@ -61,16 +61,16 @@ class SessionManager:
         })
         session["metadata"]["updated_at"] = datetime.now().isoformat()
 
-        # Keep only last 50 messages to prevent context bloat
-        if len(session["messages"]) > 50:
-            session["messages"] = session["messages"][-50:]
+        # Keep only last 80 messages to prevent context bloat
+        if len(session["messages"]) > 80:
+            session["messages"] = session["messages"][-80:]
 
         self._save_session(session_id)
 
     def get_conversation(
         self,
         session_id: str,
-        max_messages: int = 20,
+        max_messages: int = 40,
     ) -> List[Dict[str, str]]:
         """Get conversation history formatted for the LLM."""
         session = self.get_session(session_id)

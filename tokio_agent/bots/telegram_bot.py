@@ -74,6 +74,23 @@ allowed_user_ids: set = set()
 # ── Pending file sends (agent -> user) ──
 _pending_files: dict = {}  # chat_id -> list of file paths
 
+# ── Deduplication: track recently processed update_ids ──
+from collections import OrderedDict
+
+_processed_updates: OrderedDict = OrderedDict()
+_DEDUP_MAX_SIZE = 200  # keep last 200 update_ids
+
+
+def _is_duplicate_update(update_id: int) -> bool:
+    """Check if this update was already processed. Returns True if duplicate."""
+    if update_id in _processed_updates:
+        return True
+    _processed_updates[update_id] = True
+    # Evict oldest entries to keep memory bounded
+    while len(_processed_updates) > _DEDUP_MAX_SIZE:
+        _processed_updates.popitem(last=False)
+    return False
+
 
 # ── Helpers ──
 
@@ -90,17 +107,28 @@ async def _safe_send_chat_action(context: ContextTypes.DEFAULT_TYPE, chat_id: in
 
 
 async def _safe_reply_text(update: Update, text: str):
-    """Reply with retry logic for sporadic network errors."""
+    """Reply with retry logic for sporadic network errors.
+
+    Only retries on NetworkError (connection refused, DNS, etc).
+    TimedOut is NOT retried because the message may have been delivered
+    despite the timeout, causing duplicate messages to the user.
+    """
     if not update.message:
         return
-    for attempt in range(3):
+    try:
+        await update.message.reply_text(text)
+    except TelegramTimedOut:
+        # Timeout means Telegram might have received it — do NOT retry
+        logger.warning("Telegram reply timed out — not retrying to avoid duplicate")
+    except TelegramNetworkError:
+        # True network failure — safe to retry once
+        await asyncio.sleep(1.5)
         try:
             await update.message.reply_text(text)
-            return
-        except (TelegramTimedOut, TelegramNetworkError):
-            await asyncio.sleep(1.0 * (attempt + 1))
         except Exception:
-            return
+            logger.error("Telegram reply failed on retry")
+    except Exception:
+        return
 
 
 async def _safe_send_document(context: ContextTypes.DEFAULT_TYPE, chat_id: int,
@@ -268,6 +296,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle text messages -> TokioAI. Detects YouTube URLs."""
     if not await _guard_access(update):
+        return
+    # Deduplicate: skip if we already processed this update
+    if _is_duplicate_update(update.update_id):
+        logger.warning(f"⚠️ Duplicate update_id {update.update_id} — skipping")
         return
     user_id = update.effective_user.id
     message_text = update.message.text
@@ -1035,13 +1067,30 @@ async def acl_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+_conflict_count = 0
+
 async def _error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    global _conflict_count
     from telegram.error import Conflict as TelegramConflict
     error = context.error
     if isinstance(error, TelegramConflict):
-        logger.warning("Conflict error - another polling instance. Retrying...")
-        await asyncio.sleep(5)
+        _conflict_count += 1
+        if _conflict_count <= 5:
+            logger.warning(
+                f"Conflict error #{_conflict_count} - another polling instance. "
+                f"Waiting 10s..."
+            )
+            await asyncio.sleep(10)
+        else:
+            logger.error(
+                f"Conflict error #{_conflict_count} - persistent conflict. "
+                f"Another bot instance is likely running with the same token. "
+                f"Suppressing further conflict logs."
+            )
+            await asyncio.sleep(30)
         return
+    # Reset conflict counter on any other error type (means polling is working)
+    _conflict_count = 0
     if isinstance(error, (TelegramTimedOut, TelegramNetworkError)):
         logger.warning(f"Network error: {error}")
         return
@@ -1061,26 +1110,9 @@ def main():
     _init_access_control()
     logger.info(f"ACL: {len(allowed_user_ids)} usuarios autorizados")
 
-    # Delete webhook + force-claim polling
-    import httpx as _httpx
-    try:
-        resp = _httpx.get(
-            f"https://api.telegram.org/bot{token}/deleteWebhook?drop_pending_updates=false",
-            timeout=10,
-        )
-        logger.info(f"deleteWebhook: {resp.json().get('ok')}")
-    except Exception as e:
-        logger.warning(f"deleteWebhook failed: {e}")
-
-    for _ in range(3):
-        try:
-            _httpx.get(
-                f"https://api.telegram.org/bot{token}/getUpdates?offset=-1&timeout=1",
-                timeout=5,
-            )
-        except Exception:
-            pass
-        time.sleep(2)
+    # No manual Telegram API calls here — run_polling(drop_pending_updates=True)
+    # handles deleteWebhook and getUpdates internally.
+    # Manual calls were causing 409 Conflict with the library's own polling.
 
     logger.info("TokioAI Telegram Bot v2.1 starting...")
     logger.info(f"CLI Service: {CLI_SERVICE_URL}")

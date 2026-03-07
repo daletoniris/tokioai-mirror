@@ -140,8 +140,14 @@ class TokioAgent:
             extra_instructions=self._get_extra_instructions(),
         )
 
-        # Get conversation history
-        conversation = self.session_manager.get_conversation(session_id)
+        # Get conversation history (excludes the message we just added)
+        full_conversation = self.session_manager.get_conversation(session_id)
+        # Remove the last message (the one we just added) since it's passed as user_prompt
+        # But only if there are at least 2 messages — don't lose all context
+        if full_conversation and len(full_conversation) > 1:
+            conversation = full_conversation[:-1]
+        else:
+            conversation = None
 
         # ── Think → Act → Observe → Learn loop ──
         accumulated_context = ""
@@ -177,7 +183,7 @@ class TokioAgent:
                 response = await self.llm.generate(
                     system_prompt=system_prompt,
                     user_prompt=prompt,
-                    conversation=conversation[:-1] if conversation else None,
+                    conversation=conversation,
                     max_tokens=4096,
                     temperature=0.3,
                     images=round_images,
@@ -268,7 +274,10 @@ class TokioAgent:
 
         if result.success:
             self.error_learner.reset_tool(tool_name)
-            return f"\n## Result of {tool_name}:\n{result.output[:5000]}\n"
+            output = result.output or ""
+            if len(output) > 8000:
+                output = output[:8000] + "\n[TRUNCADO]"
+            return f"\n## Result of {tool_name}:\n{output}\n"
         else:
             suggestion = self.error_learner.analyze_error(tool_name, result.error or "")
             if suggestion is None:

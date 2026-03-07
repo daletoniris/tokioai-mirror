@@ -403,6 +403,34 @@ The setup wizard (`tokio setup`) lets you choose how to deploy:
 
 > **Note:** Mode 1 is the default and works perfectly without any cloud account. The WAF/GCP modules (`tokio_cloud/`) are entirely optional — the core agent, CLI, API, and Telegram bot work 100% standalone.
 
+### Tailscale Mesh — Connect to Any Hardware
+
+When running in **Full Cloud** mode, TokioAI can still control local hardware (Raspberry Pi, routers, IoT devices) through a [Tailscale](https://tailscale.com) mesh VPN:
+
+```
+Cloud VM (GCP/AWS)                    Your Home
+┌────────────────┐                   ┌─────────────────┐
+│ TokioAI Agent  │◄── Tailscale ───►│ Raspberry Pi    │
+│ Telegram Bot   │    (WireGuard)   │ Router (SSH)    │
+│ WAF/SOC        │                  │ IoT devices     │
+└────────────────┘                  └─────────────────┘
+  100.x.x.1                           100.x.x.2
+```
+
+- **Zero cost** — Tailscale free tier covers up to 100 devices
+- **Zero config** — Just `curl -fsSL https://tailscale.com/install.sh | sh && tailscale up`
+- **Auto-reconnect** — Switch networks, reboot, change ISP — it just works
+- **Subnet routing** — Access your entire LAN (routers, printers, NAS) from the cloud
+- **No ports exposed** — All TokioAI access via Telegram, no public endpoints
+
+For setup instructions, see [`docs/TAILSCALE-MESH.md`](docs/TAILSCALE-MESH.md).
+
+Use `docker-compose.cloud.yml` for cloud deployments with shared PostgreSQL:
+
+```bash
+docker compose -f docker-compose.cloud.yml up -d
+```
+
 ---
 
 ## 🌐 WAF Dashboard (Optional)
