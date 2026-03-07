@@ -538,5 +538,70 @@ def load_builtin_tools(registry: ToolRegistry) -> int:
     except Exception as e:
         logger.warning(f"⚠️ Document tools no disponibles: {e}")
 
+    # ── Drone Tools (DJI Tello) ────────────────────────────────────────────
+    try:
+        from .drone_tools import drone_control
+
+        registry.register(
+            name="drone",
+            description=(
+                "Control de drone DJI Tello: connect, disconnect, takeoff, land, emergency, "
+                "move, rotate, flip, go_xyz, curve, rc_control, set_speed, motor_on, motor_off, "
+                "patrol, stream_on, stream_off, take_photo, set_video, status, battery, "
+                "telemetry, mission_pad, wifi, flight_log, reboot"
+            ),
+            category="IoT",
+            parameters={
+                "action": "Accion del drone",
+                "params": "Parametros especificos de la accion",
+            },
+            executor=drone_control,
+            examples=[
+                'TOOL:drone({"action": "connect"})',
+                'TOOL:drone({"action": "takeoff"})',
+                'TOOL:drone({"action": "move", "params": {"direction": "forward", "distance": 100}})',
+                'TOOL:drone({"action": "rotate", "params": {"direction": "clockwise", "degrees": 90}})',
+                'TOOL:drone({"action": "patrol", "params": {"pattern": "square", "size": 150}})',
+                'TOOL:drone({"action": "take_photo", "params": {"output": "/tmp/drone.jpg"}})',
+                'TOOL:drone({"action": "status"})',
+                'TOOL:drone({"action": "land"})',
+            ],
+        )
+        count += 1
+    except Exception as e:
+        logger.warning(f"⚠️ Drone tools no disponibles: {e}")
+
+    # ── Coffee Machine Tools (Raspberry Pi) ─────────────────────────────
+    try:
+        from .coffee_tools import coffee_control
+
+        registry.register(
+            name="coffee",
+            description=(
+                "Control de máquina de café con Raspberry Pi: brew, recipes, status, "
+                "history, emotion, emotions, emergency_stop, test_pumps, calibrate, custom"
+            ),
+            category="IoT",
+            parameters={
+                "action": "Acción de la máquina de café",
+                "params": "recipe, water_ml, milk_ml, pump, duration, mood, limit",
+            },
+            executor=coffee_control,
+            examples=[
+                'TOOL:coffee({"action": "brew", "params": {"recipe": "cafe_con_leche"}})',
+                'TOOL:coffee({"action": "brew", "params": {"recipe": "espresso"}})',
+                'TOOL:coffee({"action": "brew", "params": {"recipe": "cortado"}})',
+                'TOOL:coffee({"action": "recipes"})',
+                'TOOL:coffee({"action": "status"})',
+                'TOOL:coffee({"action": "history"})',
+                'TOOL:coffee({"action": "emotion", "params": {"mood": "happy"}})',
+                'TOOL:coffee({"action": "emergency_stop"})',
+                'TOOL:coffee({"action": "custom", "params": {"water_ml": 100, "milk_ml": 50}})',
+            ],
+        )
+        count += 1
+    except Exception as e:
+        logger.warning(f"⚠️ Coffee tools no disponibles: {e}")
+
     logger.info(f"✅ {count} tools builtin registradas")
     return count
