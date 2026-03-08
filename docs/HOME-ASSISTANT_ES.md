@@ -17,6 +17,23 @@ Dispositivos (luces, enchufes, aspiradora, Alexa, sensores)
 
 TokioAI se comunica con Home Assistant via su REST API. Cuando se despliega en un servidor remoto (ej. GCP), la conectividad se logra a traves de una [mesh VPN Tailscale](./TAILSCALE-MESH_ES.md) — sin exponer puertos a internet.
 
+### LocalTuya (Control Local)
+
+Los dispositivos Tuya se controlan localmente via [LocalTuya](https://github.com/xZetsubou/hass-localtuya) — una integracion custom de HA que se comunica directamente con los dispositivos en la red local, sin pasar por la nube de Tuya.
+
+**Ventajas sobre Tuya Cloud:**
+- Sin dependencia de la nube — funciona aunque los servidores de Tuya esten caidos
+- Sin errores de "sign invalid" por tokens expirados
+- Tiempos de respuesta mas rapidos (comunicacion directa por LAN)
+- No requiere internet para controlar dispositivos
+
+**Requisitos:**
+- Local keys de los dispositivos Tuya (extraidos con `tinytuya` o `tuya_sharing`)
+- Los dispositivos deben estar en la misma red que Home Assistant
+- IPs de los dispositivos (descubiertos via `tinytuya.deviceScan()`)
+
+Ver [detalles de configuracion de LocalTuya](#configuracion-de-localtuya) mas abajo.
+
 ## Prerequisitos
 
 1. **Home Assistant** instalado y corriendo (Docker recomendado)
@@ -183,9 +200,74 @@ docker restart homeassistant
 - Verificar en la UI de HA > Ajustes > Dispositivos
 - Probar apagar y encender el dispositivo
 
+## Configuracion de LocalTuya
+
+LocalTuya reemplaza la integracion de Tuya Cloud para control puramente local de dispositivos.
+
+### 1. Instalar LocalTuya
+
+Descargar [hass-localtuya](https://github.com/xZetsubou/hass-localtuya) y extraer en `<ha-config>/custom_components/localtuya/`.
+
+### 2. Extraer Local Keys de los Dispositivos
+
+```python
+# Usando tuya_sharing (requiere cuenta Tuya Cloud)
+from tuya_sharing import Manager
+m = Manager(...)
+m.update_device_cache()
+for dev in m.device_map.values():
+    print(f"{dev.name}: id={dev.id} key={dev.local_key}")
+```
+
+O usar `tinytuya wizard` para un enfoque interactivo.
+
+### 3. Descubrir IPs de Dispositivos
+
+```python
+import tinytuya
+devices = tinytuya.deviceScan(verbose=False, maxretry=3)
+for ip, dev in devices.items():
+    print(f"{ip}: id={dev['gwId']}, ver={dev['version']}")
+```
+
+### 4. Agregar Integracion en HA
+
+Ir a Ajustes > Integraciones > Agregar > LocalTuya. Elegir modo "Sin Cloud" para operacion 100% local.
+
+Agregar cada dispositivo con:
+- **Device ID** y **Local Key** (del paso 2)
+- **Direccion IP** (del paso 3)
+- **Version de protocolo** (3.3 para la mayoria, 3.4 para enchufes nuevos)
+
+### 5. Configurar Tipos de Entidad
+
+Para cada dispositivo, seleccionar la plataforma apropiada:
+- **Luces**: DPS 20 (switch), 22 (brillo), 23 (temp color), 24 (color HSV)
+- **Enchufes**: DPS 1 (on/off)
+- **Aspiradora**: DPS 5 (estado), 1 (iniciar), 2 (pausa), 4 (modo), 9 (velocidad)
+
+### 6. Remover Tuya Cloud
+
+Una vez confirmado que LocalTuya funciona correctamente, remover la integracion Tuya Cloud para evitar errores de "sign invalid" y entidades duplicadas.
+
+## Integracion con Alexa
+
+Alexa se controla via [alexa_media_player](https://github.com/alandtse/alexa_media_player), una integracion custom de HA.
+
+### Reproduccion de Musica
+
+TokioAI usa un sistema de 3 metodos con fallback para reproduccion confiable:
+
+1. **`notify/alexa_media` con TTS** — Envia un comando de voz como "play jazz en Amazon Music" (mas preciso)
+2. **`notify/alexa_media` con ANNOUNCE** — Envia como comando de anuncio
+3. **`media_player/play_media` con AMAZON_MUSIC** — Fallback directo por tipo de media
+
+Este enfoque da mejores resultados que el metodo generico `play_media` solo, ya que interpreta la consulta de la misma forma que Alexa interpretaria un comando de voz.
+
 ## Notas de Seguridad
 
 - El token de HA se guarda solo en `.env` (gitignored, nunca se commitea)
 - La comunicacion entre TokioAI y HA va por Tailscale (cifrado WireGuard) o red local
 - El whitelist de dispositivos previene que el agente interactue con entidades no autorizadas
 - Ningun puerto de HA se expone a internet publico
+- LocalTuya solo se comunica en la red local — ningun dato sale a la nube
