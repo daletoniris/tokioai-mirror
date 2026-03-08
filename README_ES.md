@@ -410,6 +410,24 @@ El asistente de configuración (`tokio setup`) te permite elegir cómo desplegar
 
 > **Nota:** El Modo 1 es el predeterminado y funciona perfectamente sin ninguna cuenta cloud. Los módulos WAF/GCP (`tokio_cloud/`) son completamente opcionales — el agente core, CLI, API y bot de Telegram funcionan 100% de forma independiente.
 
+### Tailscale Mesh — Conecta con Cualquier Hardware
+
+En modo **Full Cloud**, TokioAI puede controlar hardware local (Raspberry Pi, routers, dispositivos IoT) a traves de una mesh VPN [Tailscale](https://tailscale.com):
+
+- **Costo cero** — El tier gratis de Tailscale cubre hasta 100 dispositivos
+- **Zero config** — Solo `curl -fsSL https://tailscale.com/install.sh | sh && tailscale up`
+- **Auto-reconexion** — Cambia de red, reinicia, cambia ISP — simplemente funciona
+- **Subnet routing** — Accede a toda tu LAN (routers, impresoras, NAS) desde la nube
+- **Sin puertos expuestos** — Todo el acceso via Telegram, sin endpoints publicos
+
+Para instrucciones de setup, ver [`docs/TAILSCALE-MESH_ES.md`](docs/TAILSCALE-MESH_ES.md).
+
+### Home Assistant — Control de Dispositivos IoT
+
+TokioAI controla dispositivos IoT (luces, enchufes, aspiradora, Alexa, sensores) a traves de la API REST de Home Assistant. Un **whitelist estricto de dispositivos** previene el control accidental de entidades no deseadas.
+
+Para instrucciones de setup, ver [`docs/HOME-ASSISTANT_ES.md`](docs/HOME-ASSISTANT_ES.md).
+
 ---
 
 ## 🌐 Dashboard WAF (Opcional)

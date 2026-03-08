@@ -432,6 +432,12 @@ Cloud VM (GCP/AWS)                    Your Home
 
 For setup instructions, see [`docs/TAILSCALE-MESH.md`](docs/TAILSCALE-MESH.md).
 
+### Home Assistant — IoT Device Control
+
+TokioAI controls IoT devices (lights, switches, vacuum, Alexa, sensors) through Home Assistant's REST API. A strict **device whitelist** prevents accidental control of unintended entities.
+
+For setup instructions, see [`docs/HOME-ASSISTANT.md`](docs/HOME-ASSISTANT.md).
+
 Use `docker-compose.cloud.yml` for cloud deployments with shared PostgreSQL:
 
 ```bash
