@@ -19,6 +19,37 @@ import requests
 
 logger = logging.getLogger(__name__)
 
+# ── Allowed devices whitelist ─────────────────────────────────────────────
+# Only these devices can be controlled/queried by TokioAI.
+# Prevents accidental writes to unknown entities that caused instability.
+#
+# PRIMARY_DEVICES: the 6 real devices (what gets listed/reported)
+# ALLOWED_ENTITY_IDS: full set including useful sub-entities (what can be accessed)
+
+PRIMARY_DEVICES = {
+    "light.smart_bulb":                          "Lampara Cocina",
+    "light.smart_bulb_2":                        "Living",
+    "light.smart_bulb_3":                        "Laboratorio",
+    "switch.enchufe_smart_macroled_enchufe_1":   "Enchufe Cocina",
+    "media_player.jarvis":                       "Jarvis (Alexa)",
+    "vacuum.ava_pro_ii":                         "AVA PRO II",
+}
+
+ALLOWED_ENTITY_IDS = {
+    # ── Primary devices (6) ──
+    *PRIMARY_DEVICES.keys(),
+    # ── Useful sub-entities ──
+    "sensor.temperatura_casa",          # temp sensor (read-only)
+    "sensor.ava_pro_ii_bateria",        # vacuum battery
+    "select.ava_pro_ii_modo",           # vacuum mode (smart/turbo)
+}
+
+
+def _is_allowed(entity_id: str) -> bool:
+    """Check if an entity_id is in the whitelist."""
+    return (entity_id or "").strip().lower() in ALLOWED_ENTITY_IDS
+
+
 # ── Device Memory (persistent cache) ──────────────────────────────────────
 
 _DEVICE_MEMORY_PATH = Path(
@@ -369,6 +400,8 @@ def _resolve_alexa(device: str) -> str:
 def alexa_speak(text: str, device_name: str = "default") -> str:
     """Make Alexa speak text via Home Assistant."""
     eid = _resolve_alexa(device_name)
+    if not _is_allowed(eid):
+        return f"🚫 Dispositivo no autorizado: {eid}. Solo se permiten dispositivos del whitelist."
     ok, detail = _ha_post("notify/alexa_media", {
         "message": text, "target": [eid], "data": {"type": "tts"},
     })
@@ -385,6 +418,8 @@ def alexa_speak(text: str, device_name: str = "default") -> str:
 def alexa_play_music(query: str, device_name: str = "default") -> str:
     """Play music on Alexa via Home Assistant."""
     eid = _resolve_alexa(device_name)
+    if not _is_allowed(eid):
+        return f"🚫 Dispositivo no autorizado: {eid}. Solo se permiten dispositivos del whitelist."
     _ha_post("media_player/turn_on", {"entity_id": eid}, timeout=10)
     _ha_post("media_player/volume_set", {"entity_id": eid, "volume_level": 0.35}, timeout=10)
     time.sleep(1.0)
@@ -408,6 +443,8 @@ def alexa_play_music(query: str, device_name: str = "default") -> str:
 def alexa_status(device_name: str = "default") -> str:
     """Get Alexa device status (SILENT, no TTS)."""
     eid = _resolve_alexa(device_name)
+    if not _is_allowed(eid):
+        return f"🚫 Dispositivo no autorizado: {eid}. Solo se permiten dispositivos del whitelist."
     ok, err, data = _ha_get_state(eid)
     if not ok:
         return f"❌ No pude obtener estado de {eid}: {err}"
@@ -428,6 +465,8 @@ def alexa_status(device_name: str = "default") -> str:
 def alexa_set_volume(device_name: str = "default", level: int = 50) -> str:
     """Set Alexa volume 0-100 (SILENT)."""
     eid = _resolve_alexa(device_name)
+    if not _is_allowed(eid):
+        return f"🚫 Dispositivo no autorizado: {eid}. Solo se permiten dispositivos del whitelist."
     level = max(0, min(100, int(level)))
     ok, detail = _ha_post("media_player/volume_set", {
         "entity_id": eid, "volume_level": level / 100.0,
@@ -463,6 +502,8 @@ def ha_control_light(
 ) -> str:
     """Control Home Assistant light (on/off, brightness, color)."""
     entity_id = _resolve_ha_entity("light", entity_id)
+    if not _is_allowed(entity_id):
+        return f"🚫 Dispositivo no autorizado: {entity_id}. Solo se permiten dispositivos del whitelist."
     state = state.strip().lower()
     if state not in ("on", "off", "toggle"):
         return "❌ state debe ser 'on', 'off' o 'toggle'"
@@ -495,6 +536,8 @@ def ha_control_light(
 def ha_control_switch(entity_id: str, state: str) -> str:
     """Control Home Assistant switch (on/off/toggle)."""
     entity_id = _resolve_ha_entity("switch", entity_id)
+    if not _is_allowed(entity_id):
+        return f"🚫 Dispositivo no autorizado: {entity_id}. Solo se permiten dispositivos del whitelist."
     state = state.strip().lower()
     if state not in ("on", "off", "toggle"):
         return "❌ state debe ser 'on', 'off' o 'toggle'"
@@ -511,6 +554,8 @@ def ha_control_switch(entity_id: str, state: str) -> str:
 def ha_control_vacuum(entity_id: str, action: str) -> str:
     """Control Home Assistant vacuum (start/stop/pause/return_to_base/locate)."""
     entity_id = _resolve_ha_entity("vacuum", entity_id)
+    if not _is_allowed(entity_id):
+        return f"🚫 Dispositivo no autorizado: {entity_id}. Solo se permiten dispositivos del whitelist."
     action = action.strip().lower()
     valid = {"start", "stop", "pause", "return_to_base", "locate", "clean_spot"}
     if action not in valid:
@@ -529,10 +574,13 @@ def ha_get_state(entity_id: str) -> str:
     if raw and "." not in raw:
         for d in ("light", "switch", "vacuum", "sensor", "binary_sensor", "media_player"):
             candidate = _resolve_ha_entity(d, raw)
-            ok, _, _ = _ha_get_state(candidate)
-            if ok:
-                entity_id = candidate
-                break
+            if _is_allowed(candidate):
+                ok, _, _ = _ha_get_state(candidate)
+                if ok:
+                    entity_id = candidate
+                    break
+    if not _is_allowed(entity_id):
+        return f"🚫 Dispositivo no autorizado: {entity_id}. Solo se permiten dispositivos del whitelist."
     ok, err, data = _ha_get_state(entity_id)
     if not ok:
         return f"❌ No pude obtener estado de {entity_id}: {err}"
@@ -550,30 +598,33 @@ def ha_get_state(entity_id: str) -> str:
 
 
 def ha_sync_entities() -> str:
-    """Force sync HA entities into persistent cache."""
+    """Force sync HA entities into persistent cache (only whitelisted)."""
     ok, err, states = _ha_list_states()
     if not ok:
         return f"❌ No pude sincronizar entidades HA: {err}"
-    domains: Dict[str, int] = {}
+    synced = []
     for st in states:
         eid = str(st.get("entity_id", "")).lower()
-        if "." not in eid:
-            continue
-        d = eid.split(".", 1)[0]
-        domains[d] = domains.get(d, 0) + 1
+        if eid in PRIMARY_DEVICES:
+            fn = PRIMARY_DEVICES[eid]
+            state = str(st.get("state", "")).strip()
+            synced.append(f"  - {fn} ({eid}): {state}")
     _save_device_memory()
-    summary = ", ".join(f"{k}={v}" for k, v in sorted(domains.items()))
-    return f"✅ Sincronizadas {len(states)} entidades. {summary}"
+    lines = [f"✅ {len(PRIMARY_DEVICES)} dispositivos sincronizados:"]
+    lines.extend(synced)
+    return "\n".join(lines)
 
 
 def ha_list_entities(domain: str = "light", filter_unavailable: bool = True) -> str:
-    """List HA entities for a domain."""
+    """List HA entities for a domain (only whitelisted devices)."""
     domain = (domain or "light").strip().lower()
     mem = _load_device_memory()
     entities = mem.get("entities", {}) if isinstance(mem, dict) else {}
     rows = []
     for eid, info in entities.items():
         if not str(eid).startswith(f"{domain}."):
+            continue
+        if not _is_allowed(str(eid)):
             continue
         fn = str(info.get("friendly_name", "")).strip()
         st = str(info.get("state", "")).strip()
@@ -586,14 +637,16 @@ def ha_list_entities(domain: str = "light", filter_unavailable: bool = True) -> 
         entities = mem.get("entities", {}) if isinstance(mem, dict) else {}
         for eid, info in entities.items():
             if str(eid).startswith(f"{domain}."):
+                if not _is_allowed(str(eid)):
+                    continue
                 fn = str(info.get("friendly_name", "")).strip()
                 st = str(info.get("state", "")).strip()
                 if filter_unavailable and st.lower() in ("unavailable", "unknown", "none"):
                     continue
                 rows.append((str(eid), fn, st))
     if not rows:
-        return f"⚠️ No encontré entidades del dominio '{domain}' disponibles."
-    lines = [f"📋 Entidades {domain} ({len(rows)}):"]
+        return f"⚠️ No encontré entidades autorizadas del dominio '{domain}'."
+    lines = [f"📋 Entidades {domain} autorizadas ({len(rows)}):"]
     for eid, fn, st in sorted(rows):
         lines.append(f"  - {eid} ({fn}) [{st}]" if fn else f"  - {eid} [{st}]")
     return "\n".join(lines)
@@ -605,6 +658,8 @@ def ha_set_alias(alias: str, entity_id: str) -> str:
     entity_id = (entity_id or "").strip().lower()
     if not alias or not entity_id or "." not in entity_id:
         return "❌ alias y entity_id válido son requeridos"
+    if not _is_allowed(entity_id):
+        return f"🚫 Dispositivo no autorizado: {entity_id}. Solo se permiten dispositivos del whitelist."
     domain = entity_id.split(".", 1)[0]
     mem = _load_device_memory()
     mem.setdefault("aliases", {})[alias] = entity_id
