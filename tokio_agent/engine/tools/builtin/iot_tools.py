@@ -27,21 +27,27 @@ logger = logging.getLogger(__name__)
 # ALLOWED_ENTITY_IDS: full set including useful sub-entities (what can be accessed)
 
 PRIMARY_DEVICES = {
-    "light.smart_bulb":                          "Lampara Cocina",
-    "light.smart_bulb_2":                        "Living",
-    "light.smart_bulb_3":                        "Laboratorio",
-    "switch.enchufe_smart_macroled_enchufe_1":   "Enchufe Cocina",
+    "light.lampara_cocina_lampara_cocina":       "Lampara Cocina",
+    "light.living_living":                       "Living",
+    "light.laboratorio_laboratorio":             "Laboratorio",
+    "switch.enchufe_cocina_enchufe_cocina":      "Enchufe Cocina",
     "media_player.jarvis":                       "Jarvis (Alexa)",
-    "vacuum.ava_pro_ii":                         "AVA PRO II",
+    "vacuum.ava_pro_ii_ava_pro_ii":              "AVA PRO II",
 }
 
 ALLOWED_ENTITY_IDS = {
     # ── Primary devices (6) ──
     *PRIMARY_DEVICES.keys(),
-    # ── Useful sub-entities ──
-    "sensor.temperatura_casa",          # temp sensor (read-only)
-    "sensor.ava_pro_ii_bateria",        # vacuum battery
-    "select.ava_pro_ii_modo",           # vacuum mode (smart/turbo)
+    # ── Sensors: environment ──
+    "sensor.temperatura_casa",                   # temp sensor (read-only)
+    # ── Sensors: vacuum ──
+    "sensor.ava_pro_ii_ava_pro_ii_bateria",      # vacuum battery (LocalTuya)
+    # ── Sensors: Alexa ──
+    "sensor.jarvis_proxima_alarma",              # Alexa next alarm
+    "sensor.jarvis_proximo_recordatorio",         # Alexa next reminder
+    "sensor.jarvis_proximo_temporizador",         # Alexa next timer
+    # ── Switches: Alexa ──
+    "switch.jarvis_no_molestar",                 # Alexa do-not-disturb
 }
 
 
@@ -416,28 +422,63 @@ def alexa_speak(text: str, device_name: str = "default") -> str:
 
 
 def alexa_play_music(query: str, device_name: str = "default") -> str:
-    """Play music on Alexa via Home Assistant."""
+    """Play music on Alexa via Home Assistant.
+
+    Uses alexa_media notify service to send a voice command like
+    'play [query] on Amazon Music' which gives much more accurate results
+    than the generic media_player/play_media approach.
+    """
     eid = _resolve_alexa(device_name)
     if not _is_allowed(eid):
         return f"🚫 Dispositivo no autorizado: {eid}. Solo se permiten dispositivos del whitelist."
+
+    # Ensure device is on and at reasonable volume
     _ha_post("media_player/turn_on", {"entity_id": eid}, timeout=10)
     _ha_post("media_player/volume_set", {"entity_id": eid, "volume_level": 0.35}, timeout=10)
     time.sleep(1.0)
-    attempts = [
-        ("custom", f"play {query}", "comando remoto"),
-        ("music", query, "búsqueda nativa"),
-    ]
-    for media_type, media_id, label in attempts:
-        ok, _ = _ha_post("media_player/play_media", {
-            "entity_id": eid, "media_content_type": media_type, "media_content_id": media_id,
-        })
-        if ok:
-            time.sleep(3)
-            st_ok, _, data = _ha_get_state(eid)
-            if st_ok and data.get("state") == "playing":
-                return f"✅ Reproducción iniciada en {eid}: '{query}' ({label})"
-            return f"⚠️ Comando enviado a {eid} ({label}), verificar manualmente."
-    return f"❌ No pude iniciar reproducción de '{query}' en {eid}"
+
+    # Method 1: alexa_media notify with voice command (most accurate)
+    # This sends a voice command as if you said it to Alexa
+    ok, detail = _ha_post("notify/alexa_media", {
+        "message": f"play {query}",
+        "target": [eid],
+        "data": {"type": "tts"},
+    })
+    if ok:
+        time.sleep(4)
+        st_ok, _, data = _ha_get_state(eid)
+        if st_ok and data.get("state") == "playing":
+            title = data.get("attributes", {}).get("media_title", "")
+            artist = data.get("attributes", {}).get("media_artist", "")
+            now_playing = f" ({title}" + (f" - {artist})" if artist else ")") if title else ""
+            return f"✅ Reproduciendo en {eid}: '{query}'{now_playing}"
+
+    # Method 2: alexa_media notify with ANNOUNCE type (sends as command)
+    ok2, detail2 = _ha_post("notify/alexa_media", {
+        "message": f"play {query} on Amazon Music",
+        "target": [eid],
+        "data": {"type": "announce"},
+    })
+    if ok2:
+        time.sleep(4)
+        st_ok, _, data = _ha_get_state(eid)
+        if st_ok and data.get("state") == "playing":
+            return f"✅ Reproduciendo en {eid}: '{query}'"
+
+    # Method 3: Fallback to play_media with MUSIC type
+    ok3, _ = _ha_post("media_player/play_media", {
+        "entity_id": eid,
+        "media_content_type": "AMAZON_MUSIC",
+        "media_content_id": query,
+    })
+    if ok3:
+        time.sleep(3)
+        st_ok, _, data = _ha_get_state(eid)
+        if st_ok and data.get("state") == "playing":
+            return f"✅ Reproduciendo en {eid}: '{query}' (Amazon Music)"
+        return f"⚠️ Comando enviado a {eid}, verificar manualmente."
+
+    return f"❌ No pude reproducir '{query}' en {eid}"
 
 
 def alexa_status(device_name: str = "default") -> str:
