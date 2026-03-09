@@ -300,6 +300,16 @@ See `.env.example` for the full list.
 
 ## 🏗️ Architecture
 
+<div align="center">
+
+<img src="docs/tokioai-architecture.png" alt="TokioAI Architecture — ReAct Agent vs Message Gateway" width="800">
+
+*TokioAI is a ReAct autonomous agent — not a message router. [Full comparison with OpenClaw](docs/tokioai-architecture.svg)*
+
+</div>
+
+### Detailed Architecture
+
 ```
                          ┌─────────────────┐
                          │    Telegram Bot  │
