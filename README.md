@@ -255,8 +255,37 @@ tokio server
 tokio              # Interactive chat session
 tokio server       # Start REST API server
 tokio setup        # Run setup wizard
+tokio status       # Show agent and infrastructure status
+tokio tools        # List available tools
 tokio "message"    # Single message mode (non-interactive)
 ```
+
+### Remote CLI (Docker / Cloud deployments)
+
+If TokioAI is running inside a Docker container (local or cloud VM), use `docker exec`:
+
+```bash
+# Interactive session (backspace, arrows, and history work)
+docker exec -it tokio-agent python3 -m tokio_agent.cli
+
+# Single message
+docker exec tokio-agent python3 -m tokio_agent.cli "list all containers"
+
+# Status check
+docker exec tokio-agent python3 -m tokio_agent.cli status
+```
+
+Over SSH (e.g., to a cloud VM):
+
+```bash
+# Interactive session — the -t flag is required for proper terminal support
+ssh -t user@your-server "docker exec -it tokio-agent python3 -m tokio_agent.cli"
+
+# Single message
+ssh user@your-server "docker exec tokio-agent python3 -m tokio_agent.cli 'what is the WAF status?'"
+```
+
+Interactive commands inside the CLI: `/tools`, `/status`, `/clear`, `/exit`.
 
 ---
 
