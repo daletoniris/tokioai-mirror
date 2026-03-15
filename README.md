@@ -513,7 +513,7 @@ TokioAI includes a complete **Web Application Firewall** with a cyberpunk-themed
 
 | Feature | Description |
 |:--------|:------------|
-| **26 WAF Signatures** | SQL injection, XSS, command injection, path traversal, Log4Shell, SSRF, and more |
+| **25 WAF Signatures** | SQL injection, XSS, command injection, path traversal, Log4Shell, SSRF, and more |
 | **7 Behavioral Rules** | Rate limiting, brute force detection, scanner detection, honeypot traps |
 | **Real-time Detection** | Nginx → Kafka → Realtime Processor pipeline |
 | **IP Reputation** | Score-based reputation tracking per IP in PostgreSQL |
@@ -525,6 +525,71 @@ TokioAI includes a complete **Web Application Firewall** with a cyberpunk-themed
 | **SSE Live Feed** | Real-time Server-Sent Events attack stream |
 | **Attack Heatmap** | Hour-of-day × Day-of-week threat visualization |
 | **CSV Export** | Export filtered logs for analysis |
+| **Zero-Day Entropy Detector** | Detects obfuscated payloads that bypass regex WAF signatures using Shannon entropy, URL-encoding density, and encoding layer analysis. O(n) per request, <0.1ms, no ML required |
+| **Self-Contained DDoS Shield** | Multi-layer DDoS mitigation without Cloudflare: iptables/ipset (kernel) + GCP Firewall (network) + nginx blocklist (app). 7 anti-false-positive protections, progressive TTL blocking |
+| **SOC Terminal** | Rich-based terminal UI for live security monitoring with autonomous AI narration mode. Designed for SOC displays and conference demos |
+
+### Zero-Day Entropy Detector (`zero_day_entropy.py`)
+
+Catches obfuscated/encoded attack payloads that traditional regex WAF signatures miss:
+
+```
+Detection layers:
+  1. Shannon entropy — obfuscated payloads have high entropy (>4.5)
+  2. Encoding layer counter — double/triple encoding detection (17 patterns)
+  3. URL-encoding density — normal URLs: 0-10%, attacks: 30-80%+
+  4. Character ratio anomaly — special char vs alphanumeric ratio
+  5. Structural depth — nested encoding patterns
+
+Performance: 9,500+ payloads/sec, <0.1ms average, zero I/O, zero ML model.
+```
+
+Examples of payloads detected:
+- Double/triple URL-encoded SQLi (`%2527%2520OR%2520...`)
+- JNDI obfuscation (`${lower:j}${lower:n}${lower:d}${lower:i}`)
+- Overlong UTF-8 path traversal (`%c0%ae%c0%ae%c0%af...`)
+- Base64-encoded XSS in query parameters
+- CharCode obfuscation (`String.fromCharCode(...)`)
+
+### DDoS Shield v2 (`ddos_shield.py`)
+
+Self-contained DDoS mitigation — **zero external dependencies** (no Cloudflare required):
+
+```
+Layer 0: GCP Firewall     — Network-level blocking (before traffic reaches VM)
+Layer 1: iptables/ipset   — Kernel-level rate limiting (50 conn/s per IP)
+Layer 2: nginx             — Application-level rate limiting (10 req/s per IP)
+Layer 3: DDoS Shield       — Intelligent detection + auto-blocking
+```
+
+Anti-false-positive protections:
+- Hardcoded whitelist (localhost, Docker, Tailscale mesh, GCP health checks)
+- Configurable whitelist via `DDOS_WHITELIST` and `OWNER_IPS` env vars
+- Friendly User-Agent 2x threshold multiplier (Googlebot, Bingbot, etc.)
+- Sustained-rate check (10s window — blocks only persistent abuse)
+- URI targeting filter (common paths need 4x more IPs to trigger)
+- Progressive TTL: 5min → 30min → 2h → 24h (based on offense count)
+- Max 500 blocked IPs (auto-eviction of oldest entries)
+
+### SOC Terminal (`soc_terminal.py`)
+
+Live security monitoring terminal with Rich panels:
+
+```bash
+# Connected to live dashboard:
+python3 soc_terminal.py --api http://YOUR_SERVER --user admin --pass SECRET --autonomous
+
+# Demo mode (simulated data, no server needed):
+python3 soc_terminal.py --demo
+```
+
+Features:
+- Live attacks table with severity icons and OWASP classification
+- Zero-Day Radar panel with animated scanning display
+- DDoS Shield status with RPS bar graph
+- System statistics (requests, threats, blocks, episodes)
+- Blocked IPs panel with TTL countdown
+- **Autonomous narration mode** — Tokio analyzes patterns, trends, and new threats in real-time and narrates them without human input
 
 ### WAF Deployment (Optional)
 
@@ -677,7 +742,10 @@ tokioai/
 │   ├── gcp-live/                      # Production WAF stack
 │   │   ├── docker-compose.yml         #   7-container stack
 │   │   ├── dashboard-app.py           #   SOC dashboard (1385 lines)
-│   │   ├── realtime-processor.py      #   WAF engine (896 lines)
+│   │   ├── realtime-processor.py      #   WAF engine v5 (980+ lines)
+│   │   ├── zero_day_entropy.py        #   Zero-day detector (entropy-based)
+│   │   ├── ddos_shield.py             #   DDoS mitigation (self-contained)
+│   │   ├── soc_terminal.py            #   SOC terminal UI (Rich-based)
 │   │   ├── nginx.conf                 #   Reverse proxy + rate limiting
 │   │   └── deploy.sh                  #   Deployment script
 │   └── waf-deployment/                # WAF setup docs + ModSecurity

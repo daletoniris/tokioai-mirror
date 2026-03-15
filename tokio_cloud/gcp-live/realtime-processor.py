@@ -18,6 +18,23 @@ from kafka import KafkaConsumer
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
+# ─── TokioAI Advanced Modules ────────────────────────────────────────────────
+try:
+    from zero_day_entropy import analyze_payload as zd_analyze
+    HAS_ZERO_DAY = True
+    print("[rt] Zero-Day Entropy Detector: LOADED")
+except ImportError:
+    HAS_ZERO_DAY = False
+    print("[rt] Zero-Day Entropy Detector: not available")
+
+try:
+    from ddos_shield import detector as ddos_detector
+    HAS_DDOS = True
+    print("[rt] DDoS Shield: LOADED")
+except ImportError:
+    HAS_DDOS = False
+    print("[rt] DDoS Shield: not available")
+
 # ─── Config ───────────────────────────────────────────────────────────────────
 PG = dict(
     host=os.getenv("POSTGRES_HOST", "postgres"),
@@ -42,7 +59,13 @@ EPISODE_MIN_REQUESTS = int(os.getenv("EPISODE_MIN_REQUESTS", "2"))
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 OWNER_CHAT_ID = os.getenv("TELEGRAM_OWNER_CHAT_ID", "")
 
-INTERNAL_IPS = {"127.0.0.1", "::1", "172.18.0.1", "172.17.0.1", "10.10.0.1"}
+INTERNAL_IPS = {
+    "127.0.0.1", "::1", "172.18.0.1", "172.17.0.1", "10.10.0.1",
+    # Add your Tailscale/internal IPs via OWNER_IPS env var
+}
+# Owner IPs — never auto-block (loaded from env, comma-separated)
+_owner_ips = os.getenv("OWNER_IPS", "").split(",")
+INTERNAL_IPS |= {ip.strip() for ip in _owner_ips if ip.strip()}
 
 # ─── OWASP Top 10 2021 ───────────────────────────────────────────────────────
 OWASP_MAP = {
@@ -71,6 +94,14 @@ THREAT_TO_OWASP = {
     "HTTP_SMUGGLING": "A06", "API_ABUSE": "A06",
     "WEBSOCKET_HIJACK": "A01",
     "CRYPTOMINER": "A05",
+    "ZERO_DAY_OBFUSCATED": "A03",
+    "VOLUMETRIC_FLOOD": "A05",
+    "DISTRIBUTED_FLOOD": "A05",
+    "IP_FLOOD": "A05",
+    "IP_BURST": "A05",
+    "SLOWLORIS": "A05",
+    "APP_LAYER_FLOOD": "A05",
+    "RATE_SPIKE": "A05",
 }
 
 # ─── WAF Signature Rules (SOC/OWASP Grade) ───────────────────────────────────
@@ -311,6 +342,24 @@ def classify_request(method, uri, status, user_agent, ip, host, request_time=0, 
 
         if size and int(size) > 1_000_000:
             matches.append({"sig_id": "BEH-007", "threat_type": "DATA_EXFIL", "severity": "high", "action": "monitor", "confidence": 0.70})
+
+    # --- Layer 2.5: Zero-Day Entropy Analysis ---
+    if HAS_ZERO_DAY and not is_safe_path:
+        zd_result = zd_analyze(text_uri, text_ua)
+        if zd_result:
+            # Only add if no existing signature already caught it with higher confidence
+            existing_max_conf = max((m["confidence"] for m in matches), default=0)
+            if zd_result["confidence"] > existing_max_conf * 0.8 or not matches:
+                matches.append({
+                    "sig_id": zd_result["sig_id"],
+                    "threat_type": zd_result["threat_type"],
+                    "severity": zd_result["severity"],
+                    "action": zd_result["action"],
+                    "confidence": zd_result["confidence"],
+                    "entropy": zd_result.get("entropy"),
+                    "encoding_layers": zd_result.get("encoding_layers"),
+                    "analysis_summary": zd_result.get("analysis_summary"),
+                })
 
     # --- Layer 3: Determine result ---
     if not matches:
@@ -801,6 +850,29 @@ def main():
                     if severity != "info":
                         stats["threats"] += 1
 
+                    # ─── DDoS Shield: record request and check ────────────
+                    if HAS_DDOS and is_real_ip:
+                        ddos_event = ddos_detector.record_request(
+                            ip, e.get("uri", ""), e.get("method", "GET"),
+                            float(e.get("request_time", 0)),
+                            int(e.get("status", 200)),
+                            e.get("user_agent", ""),
+                        )
+                        if ddos_event:
+                            ddos_type = ddos_event["type"]
+                            ddos_sev = ddos_event["severity"]
+                            print(f"[rt] DDoS: {ddos_type} — {ddos_event['description']}")
+                            stats["threats"] += 1
+                            # Block the trigger IP for severe floods
+                            if ddos_sev == "critical":
+                                auto_block_ip(
+                                    cur, ip,
+                                    f"DDoS: {ddos_type} — {ddos_event['description']}",
+                                    "ddos", threat_type=ddos_type,
+                                    severity="critical", risk_score=0.95,
+                                )
+                                stats["blocks"] += 1
+
                     if is_real_ip:
                         # Update IP reputation
                         is_threat = severity in ("high", "critical") and threat_type != "NONE"
@@ -892,9 +964,16 @@ def main():
                 last_maint = now
 
             if now - last_report > 300:
+                ddos_info = ""
+                if HAS_DDOS:
+                    ds = ddos_detector.get_status()
+                    ddos_info = (f" | DDoS: {ds['current_rps']:.0f}rps "
+                                 f"peak={ds['peak_rps']:.0f} "
+                                 f"blocked={ds['blocked_ips_count']} "
+                                 f"attack={'YES' if ds['under_attack'] else 'no'}")
                 print(f"[rt] Stats: {stats['processed']} processed | {stats['threats']} threats | "
                       f"{stats['episodes']} episodes | {stats['blocks']} blocks "
-                      f"({stats['instant_blocks']} instant)")
+                      f"({stats['instant_blocks']} instant){ddos_info}")
                 last_report = now
 
         except psycopg2.OperationalError:

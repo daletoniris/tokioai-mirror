@@ -141,12 +141,61 @@ This script:
 
 ## WAF Engine
 
-- **26 detection signatures** — SQLi, XSS, RCE, LFI, SSRF, Log4Shell, etc.
+- **25 detection signatures** — SQLi, XSS, RCE, LFI, SSRF, Log4Shell, etc.
 - **7 behavioral rules** — Rate limiting, brute force, scanner detection
 - **Honeypot endpoints** — Fake `/wp-admin`, `/.env`, `/phpmyadmin`
 - **Auto-blocking** — Instant block on critical signatures (confidence >= 0.90)
 - **IP reputation scoring** — Persistent scores in PostgreSQL
 - **Multi-phase correlation** — Detects Recon -> Probe -> Exploit -> Exfil chains
+
+## Zero-Day Entropy Detector (`zero_day_entropy.py`)
+
+Detects obfuscated/encoded attack payloads that bypass traditional regex WAF signatures. Works by analyzing statistical properties of the payload rather than matching known patterns.
+
+**Detection layers:**
+1. **Shannon entropy** — obfuscated payloads have high entropy (>4.5)
+2. **Encoding layer counter** — double/triple encoding detection (17 patterns)
+3. **URL-encoding density** — normal URLs: 0-10%, attack payloads: 30-80%+
+4. **Character ratio anomaly** — special char vs alphanumeric ratio
+5. **Structural depth** — nested encoding patterns
+
+**Performance:** 9,500+ payloads/sec, <0.1ms average, zero I/O, zero ML model. Runs inline in the realtime-processor without adding latency.
+
+## DDoS Shield v2 (`ddos_shield.py`)
+
+Self-contained DDoS mitigation — **no Cloudflare required**:
+
+| Layer | Where | What it does |
+|:------|:------|:-------------|
+| L0 | GCP Firewall | Network-level blocking (before traffic reaches VM) |
+| L1 | iptables/ipset | Kernel-level rate limiting (50 conn/s per IP) |
+| L2 | nginx | Application-level rate limiting (10 req/s per IP) |
+| L3 | DDoS Shield | Intelligent detection + auto-blocking |
+
+**Anti-false-positive protections:**
+- Hardcoded whitelist (localhost, Docker, Tailscale mesh, GCP health checks)
+- Configurable whitelist via `DDOS_WHITELIST` and `OWNER_IPS` env vars
+- Friendly User-Agent 2x threshold multiplier
+- Sustained-rate check (10s window)
+- URI targeting filter (common paths need 4x more IPs)
+- Progressive TTL: 5min -> 30min -> 2h -> 24h
+- Max 500 blocked IPs with auto-eviction
+
+## SOC Terminal (`soc_terminal.py`)
+
+Rich-based terminal UI for live security monitoring. Designed for SOC displays and conference demos.
+
+```bash
+# Connected to live dashboard:
+python3 soc_terminal.py --api http://YOUR_SERVER --user admin --pass SECRET --autonomous
+
+# Demo mode (no server needed):
+python3 soc_terminal.py --demo
+```
+
+**Panels:** Live Attacks, Zero-Day Radar, DDoS Shield, Statistics, Blocked IPs, Autonomous Narration.
+
+**Autonomous mode:** Tokio analyzes attack patterns, trends, and new threats in real-time and narrates them without human input.
 
 ---
 

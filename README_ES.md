@@ -497,7 +497,7 @@ TokioAI incluye un **Web Application Firewall** completo con un dashboard SOC de
 
 | Característica | Descripción |
 |:---------------|:------------|
-| **26 Firmas WAF** | Inyección SQL, XSS, inyección de comandos, path traversal, Log4Shell, SSRF y más |
+| **25 Firmas WAF** | Inyección SQL, XSS, inyección de comandos, path traversal, Log4Shell, SSRF y más |
 | **7 Reglas de Comportamiento** | Rate limiting, detección de fuerza bruta, detección de scanners, trampas honeypot |
 | **Detección en Tiempo Real** | Pipeline Nginx → Kafka → Procesador en Tiempo Real |
 | **Reputación de IP** | Seguimiento de reputación por puntaje por IP en PostgreSQL |
@@ -509,6 +509,71 @@ TokioAI incluye un **Web Application Firewall** completo con un dashboard SOC de
 | **Feed SSE en Vivo** | Flujo de ataques en tiempo real vía Server-Sent Events |
 | **Mapa de Calor de Ataques** | Visualización de amenazas por hora del día × día de la semana |
 | **Exportación CSV** | Exportar logs filtrados para análisis |
+| **Detector Zero-Day por Entropía** | Detecta payloads ofuscados que evaden firmas regex usando entropía de Shannon, densidad de URL-encoding y análisis de capas de encoding. O(n) por request, <0.1ms, sin ML |
+| **DDoS Shield Autónomo** | Mitigación DDoS multi-capa sin Cloudflare: iptables/ipset (kernel) + GCP Firewall (red) + nginx blocklist (app). 7 protecciones anti-falso-positivo, bloqueo con TTL progresivo |
+| **Terminal SOC** | Interfaz de terminal Rich para monitoreo de seguridad en vivo con modo de narración autónoma por IA. Diseñado para pantallas SOC y demos en conferencias |
+
+### Detector Zero-Day por Entropía (`zero_day_entropy.py`)
+
+Detecta payloads de ataque ofuscados/codificados que las firmas regex del WAF no pueden capturar:
+
+```
+Capas de detección:
+  1. Entropía de Shannon — payloads ofuscados tienen alta entropía (>4.5)
+  2. Contador de capas de encoding — detección de doble/triple encoding (17 patrones)
+  3. Densidad de URL-encoding — URLs normales: 0-10%, ataques: 30-80%+
+  4. Anomalía de ratio de caracteres — chars especiales vs alfanuméricos
+  5. Profundidad estructural — patrones de encoding anidados
+
+Rendimiento: 9,500+ payloads/seg, <0.1ms promedio, cero I/O, cero modelo ML.
+```
+
+Ejemplos de payloads detectados:
+- SQLi con doble/triple URL-encoding (`%2527%2520OR%2520...`)
+- Ofuscación JNDI (`${lower:j}${lower:n}${lower:d}${lower:i}`)
+- Path traversal con UTF-8 overlong (`%c0%ae%c0%ae%c0%af...`)
+- XSS codificado en Base64 en parámetros de query
+- Ofuscación CharCode (`String.fromCharCode(...)`)
+
+### DDoS Shield v2 (`ddos_shield.py`)
+
+Mitigación DDoS autónoma — **cero dependencias externas** (no requiere Cloudflare):
+
+```
+Capa 0: GCP Firewall     — Bloqueo a nivel de red (antes de que el tráfico llegue a la VM)
+Capa 1: iptables/ipset   — Rate limiting a nivel kernel (50 conn/s por IP)
+Capa 2: nginx             — Rate limiting a nivel aplicación (10 req/s por IP)
+Capa 3: DDoS Shield       — Detección inteligente + auto-bloqueo
+```
+
+Protecciones anti-falso-positivo:
+- Whitelist hardcodeada (localhost, Docker, Tailscale mesh, GCP health checks)
+- Whitelist configurable via env vars `DDOS_WHITELIST` y `OWNER_IPS`
+- Multiplicador 2x para User-Agents amigables (Googlebot, Bingbot, etc.)
+- Verificación de tasa sostenida (ventana de 10s — bloquea solo abuso persistente)
+- Filtro de targeting por URI (paths comunes necesitan 4x más IPs para activar)
+- TTL progresivo: 5min → 30min → 2h → 24h (según cantidad de ofensas)
+- Máximo 500 IPs bloqueadas (evicción automática de las más antiguas)
+
+### Terminal SOC (`soc_terminal.py`)
+
+Terminal de monitoreo de seguridad en vivo con paneles Rich:
+
+```bash
+# Conectado al dashboard en vivo:
+python3 soc_terminal.py --api http://TU_SERVIDOR --user admin --pass SECRET --autonomous
+
+# Modo demo (datos simulados, no necesita servidor):
+python3 soc_terminal.py --demo
+```
+
+Características:
+- Tabla de ataques en vivo con íconos de severidad y clasificación OWASP
+- Panel Zero-Day Radar con animación de escaneo
+- Estado del DDoS Shield con gráfico de barras RPS
+- Estadísticas del sistema (requests, amenazas, bloqueos, episodios)
+- Panel de IPs bloqueadas con countdown de TTL
+- **Modo narración autónoma** — Tokio analiza patrones, tendencias y nuevas amenazas en tiempo real y las narra sin intervención humana
 
 ### Despliegue del WAF (Opcional)
 
@@ -661,7 +726,10 @@ tokioai/
 │   ├── gcp-live/                      # Stack WAF de producción
 │   │   ├── docker-compose.yml         #   Stack de 7 contenedores
 │   │   ├── dashboard-app.py           #   Dashboard SOC (1385 líneas)
-│   │   ├── realtime-processor.py      #   Motor WAF (896 líneas)
+│   │   ├── realtime-processor.py      #   Motor WAF v5 (980+ líneas)
+│   │   ├── zero_day_entropy.py        #   Detector zero-day (entropía)
+│   │   ├── ddos_shield.py             #   Mitigación DDoS (autónomo)
+│   │   ├── soc_terminal.py            #   Terminal SOC (Rich)
 │   │   ├── nginx.conf                 #   Reverse proxy + rate limiting
 │   │   └── deploy.sh                  #   Script de despliegue
 │   └── waf-deployment/                # Docs de setup WAF + ModSecurity

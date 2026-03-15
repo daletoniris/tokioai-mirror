@@ -93,6 +93,8 @@ services:
     container_name: tokio-gcp-realtime-processor
     volumes:
       - ./realtime-processor.py:/app/realtime-processor.py:ro
+      - ./zero_day_entropy.py:/app/zero_day_entropy.py:ro
+      - ./ddos_shield.py:/app/ddos_shield.py:ro
       - blocklist_data:/blocklist
     working_dir: /app
     command: bash -c "pip install kafka-python psycopg2-binary requests && python3 -u realtime-processor.py"
@@ -115,6 +117,12 @@ services:
       BLOCKLIST_PATH: /blocklist/blocked.conf
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_OWNER_CHAT_ID: ${TELEGRAM_OWNER_CHAT_ID:-}
+      OWNER_IPS: ${OWNER_IPS:-}
+      # DDoS Shield (self-contained: iptables + GCP Firewall + nginx)
+      DDOS_GLOBAL_RPS_WARNING: ${DDOS_GLOBAL_RPS_WARNING:-50}
+      DDOS_GLOBAL_RPS_CRITICAL: ${DDOS_GLOBAL_RPS_CRITICAL:-100}
+      DDOS_PER_IP_RPS_WARNING: ${DDOS_PER_IP_RPS_WARNING:-15}
+      DDOS_PER_IP_RPS_CRITICAL: ${DDOS_PER_IP_RPS_CRITICAL:-30}
     depends_on: [postgres, kafka]
     restart: on-failure
 
