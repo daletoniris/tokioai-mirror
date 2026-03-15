@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import readline  # enables line editing (backspace, arrows, history)
 import sys
 from typing import Optional
 
