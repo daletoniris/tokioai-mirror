@@ -538,17 +538,21 @@ def load_builtin_tools(registry: ToolRegistry) -> int:
     except Exception as e:
         logger.warning(f"⚠️ Document tools no disponibles: {e}")
 
-    # ── Drone Tools (DJI Tello) ────────────────────────────────────────────
+    # ── Drone Tools (via Safety Proxy on Raspi) ──────────────────────────
     try:
-        from .drone_tools import drone_control
+        from .drone_proxy_tools import drone_control
 
         registry.register(
             name="drone",
             description=(
-                "Control de drone DJI Tello: connect, disconnect, takeoff, land, emergency, "
-                "move, rotate, flip, go_xyz, curve, rc_control, set_speed, motor_on, motor_off, "
-                "patrol, stream_on, stream_off, take_photo, set_video, status, battery, "
-                "telemetry, mission_pad, wifi, flight_log, reboot"
+                "Control de drone DJI Tello via Safety Proxy en Raspberry Pi. "
+                "WiFi: wifi_connect/conectar_drone, wifi_disconnect/desconectar_drone, wifi_status. "
+                "Vuelo: connect, takeoff/despegar, land/aterrizar, emergency/emergencia. "
+                "Movimiento: move/mover (direction+distance), rotate/rotar (direction+degrees). "
+                "Patrones: patrol/patrullar (pattern+size). "
+                "Telemetria: status/estado, battery/bateria, telemetry/telemetria. "
+                "Seguridad: flight_log, geofence, kill_reset. "
+                "IMPORTANTE: Antes de volar ejecutar wifi_connect."
             ),
             category="IoT",
             parameters={
@@ -557,14 +561,14 @@ def load_builtin_tools(registry: ToolRegistry) -> int:
             },
             executor=drone_control,
             examples=[
-                'TOOL:drone({"action": "connect"})',
+                'TOOL:drone({"action": "wifi_connect"})',
+                'TOOL:drone({"action": "status"})',
                 'TOOL:drone({"action": "takeoff"})',
                 'TOOL:drone({"action": "move", "params": {"direction": "forward", "distance": 100}})',
                 'TOOL:drone({"action": "rotate", "params": {"direction": "clockwise", "degrees": 90}})',
                 'TOOL:drone({"action": "patrol", "params": {"pattern": "square", "size": 150}})',
-                'TOOL:drone({"action": "take_photo", "params": {"output": "/tmp/drone.jpg"}})',
-                'TOOL:drone({"action": "status"})',
                 'TOOL:drone({"action": "land"})',
+                'TOOL:drone({"action": "wifi_disconnect"})',
             ],
         )
         count += 1
@@ -602,6 +606,71 @@ def load_builtin_tools(registry: ToolRegistry) -> int:
         count += 1
     except Exception as e:
         logger.warning(f"⚠️ Coffee tools no disponibles: {e}")
+
+    # ── Raspi Vision Tools (Hailo-8L AI Camera) ───────────────────────
+    try:
+        from .raspi_vision_tools import raspi_vision
+
+        registry.register(
+            name="raspi_vision",
+            description=(
+                "Control del sistema de vision Raspberry Pi con Hailo-8L AI: "
+                "status, look (ver que detecta la camara), emotion (cambiar cara de Tokio), "
+                "model (cambiar modelo: detect/faces/pose), guard (modo guardia autonomo), "
+                "look_at (mover ojos), log (eventos recientes)"
+            ),
+            category="IoT",
+            parameters={
+                "action": "Accion: status, look, emotion, model, guard, look_at, log",
+                "params": "emotion, message, model, x, y",
+            },
+            executor=raspi_vision,
+            examples=[
+                'TOOL:raspi_vision({"action": "status"})',
+                'TOOL:raspi_vision({"action": "look"})',
+                'TOOL:raspi_vision({"action": "emotion", "params": {"emotion": "alert", "message": "Intruso detectado!"}})',
+                'TOOL:raspi_vision({"action": "model", "params": {"model": "faces"}})',
+                'TOOL:raspi_vision({"action": "guard"})',
+                'TOOL:raspi_vision({"action": "look_at", "params": {"x": 0.5, "y": -0.3}})',
+                'TOOL:raspi_vision({"action": "log"})',
+            ],
+        )
+        count += 1
+    except Exception as e:
+        logger.warning(f"⚠️ Raspi vision tools no disponibles: {e}")
+
+    # ── Security & Pentest Tools ──────────────────────────────────────────
+    try:
+        from .security_tools import security_control
+
+        registry.register(
+            name="security",
+            description=(
+                "Herramientas de seguridad ofensiva y defensiva: "
+                "nmap/scan (network scanning), wifi_scan, wifi_monitor (deauth/jamming detection), "
+                "vuln_scan/vuln (vulnerability assessment), web_test/web (headers/dirs/cors/tech), "
+                "net/red (arp/routes/ports/connections/firewall/tailscale/traceroute), "
+                "password/credenciales (strength/hash_crack/ssh_audit)"
+            ),
+            category="Security",
+            parameters={
+                "action": "Accion de seguridad",
+                "params": "Parametros especificos",
+            },
+            executor=security_control,
+            examples=[
+                'TOOL:security({"action": "nmap", "params": {"target": "192.168.8.0/24", "scan_type": "quick"}})',
+                'TOOL:security({"action": "wifi_scan"})',
+                'TOOL:security({"action": "wifi_monitor", "params": {"action": "check_deauth"}})',
+                'TOOL:security({"action": "vuln_scan", "params": {"target": "https://example.com", "type": "all"}})',
+                'TOOL:security({"action": "web_test", "params": {"target": "https://example.com", "test": "dirs"}})',
+                'TOOL:security({"action": "net", "params": {"action": "ports"}})',
+                'TOOL:security({"action": "password", "params": {"action": "strength", "password": "test123"}})',
+            ],
+        )
+        count += 1
+    except Exception as e:
+        logger.warning(f"⚠️ Security tools no disponibles: {e}")
 
     logger.info(f"✅ {count} tools builtin registradas")
     return count

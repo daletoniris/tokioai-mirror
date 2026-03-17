@@ -16,9 +16,9 @@
    ╚═╝    ╚═════╝ ╚═╝  ╚═╝╚═╝ ╚═════╝     ╚═╝  ╚═╝╚═╝
 ```
 
-### Framework de Agente de IA Autónomo
+### Framework de Agente IA Autonomo — Ofensivo y Defensivo
 
-**Conectá un LLM a toda tu infraestructura. No es un chatbot — es un agente que resuelve las cosas.**
+**Conecta un LLM a toda tu infraestructura. No es un chatbot — es un agente que ejecuta.**
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
@@ -29,9 +29,9 @@
 
 <br>
 
-*TokioAI conecta Claude, GPT o Gemini a tus servidores, bases de datos, contenedores Docker, dispositivos IoT, DNS e infraestructura cloud a través de una arquitectura segura de llamada a herramientas.*
+*TokioAI conecta Claude, GPT o Gemini a tus servidores, bases de datos, contenedores Docker, dispositivos IoT, drones, herramientas de seguridad e infraestructura cloud a traves de una arquitectura segura de tool-calling. Hecho para hackers, pentesters e investigadores de seguridad.*
 
-[Primeros Pasos](#-inicio-rápido) · [Características](#-características) · [Arquitectura](#-arquitectura) · [Dashboard WAF](#-dashboard-waf) · [Herramientas Personalizadas](#-agregar-herramientas-personalizadas)
+[Inicio Rapido](#-inicio-rapido) · [Features](#-features) · [Control de Drone](#-control-de-drone) · [Herramientas de Seguridad](#-herramientas-de-seguridad-ofensivas-y-defensivas) · [Terminal SOC](#-terminal-soc-v2) · [WAF Dashboard](#-waf-dashboard) · [Arquitectura](#-arquitectura)
 
 </div>
 
@@ -40,98 +40,112 @@
 ## Demo
 
 ```
-🌀 tokio> reiniciá el contenedor de nginx y mostrrame las últimas 20 líneas de sus logs
+tokio> escanea la red 192.168.8.0/24 y busca puertos abiertos
 
-  🔧 docker restart nginx...
-  🔧 docker logs --tail 20 nginx...
+  [security] nmap -sn 192.168.8.0/24...
+  Se encontraron 12 hosts activos.
 
-✅ Contenedor nginx reiniciado exitosamente.
+  [security] nmap -sV --top-ports 1000 192.168.8.1...
+  PORT   STATE SERVICE VERSION
+  22/tcp open  ssh     OpenSSH 8.9
+  53/tcp open  domain  dnsmasq
+  80/tcp open  http    LuCI
 
-Últimas 20 líneas:
-2026/03/01 14:23:01 [notice] 1#1: signal process started
-2026/03/01 14:23:01 [notice] 1#1: using the "epoll" event method
-2026/03/01 14:23:01 [notice] 1#1: nginx/1.25.4
-2026/03/01 14:23:01 [notice] 1#1: start worker processes
-...
+tokio> conecta el drone, despega, patrulla en cuadrado y aterriza
 
-🌀 tokio> _
+  [drone] wifi_connect → Conectado a T0K10-NET
+  [drone] takeoff → OK
+  [drone] patrol square 100cm → Ejecutando patrulla...
+  [drone] land → OK
+  [drone] wifi_disconnect → De vuelta a la red principal
+
+tokio> chequea si alguien esta haciendo ataques deauth en el WiFi
+
+  [security] wifi_monitor check_deauth...
+  === Connection Drops (dmesg) ===
+  No se detectaron eventos deauth/disassoc.
+  Estado de defensa WiFi: SEGURO PARA VOLAR
+
+tokio> _
 ```
 
 ---
 
-## 🧬 Filosofía
+## Filosofia
 
-La mayoría de las "herramientas de IA" son chatbots con una interfaz bonita. Escribís, te responde. Eso es todo.
+La mayoria de las "herramientas de IA" son chatbots con una UI linda. Escribis, te responde. Eso es todo.
 
-**TokioAI fue construido con una creencia diferente: la IA debería ejecutar, no solo responder.**
+**TokioAI fue construido con una creencia diferente: la IA debe ejecutar, no solo responder.**
 
-El mundo no necesita otro chatbot. Necesita un agente que pueda reiniciar tus contenedores a las 3 AM, consultar tu base de datos cuando algo se rompe, bloquear la IP de un atacante en tiempo real y conectarse por SSH a tu servidor para arreglar lo que está mal — todo mientras dormís.
-
-TokioAI fue construido por un arquitecto de seguridad que se cansó de cambiar entre 15 terminales, 8 dashboards y 3 consolas cloud para hacer lo que un agente inteligente podría hacer en segundos. Cada herramienta en este framework existe porque resolvió un problema real en producción, no porque quedaba bien en una demo.
+El mundo no necesita otro chatbot. Necesita un agente que pueda reiniciar tus contenedores a las 3 AM, volar un drone para patrullar tu perimetro, escanear tu red buscando vulnerabilidades, bloquear la IP de un atacante en tiempo real, detectar ataques WiFi deauth antes de que interrumpan tus operaciones, y conectarse por SSH a tu servidor para arreglar lo que esta mal — todo mientras dormis, todo desde un mensaje de Telegram.
 
 **Principios:**
-- **Ejecutar, no chatear** — Cada herramienta hace algo real. Sin funciones decorativas.
-- **Seguridad primero** — Tres capas de protección porque un agente con acceso a bash es un arma. Tratalo como tal.
-- **Tu infra, tu control** — Self-hosted, sin dependencias SaaS, tus datos se quedan en tus máquinas.
-- **Simple > rebuscado** — Python, Docker, PostgreSQL. Sin Kubernetes, sin microservicios, sin buzzwords.
+- **Ejecutar, no chatear** — Cada herramienta hace algo real. Sin features decorativas.
+- **Hackear y defender** — Pentesting ofensivo + monitoreo defensivo en un solo agente.
+- **Seguridad primero** — Tres capas de proteccion porque un agente con acceso a bash es un arma.
+- **Tu infraestructura** — Self-hosted, sin dependencias SaaS, tus datos en tus maquinas.
+- **Simple > inteligente** — Python, Docker, PostgreSQL. Sin Kubernetes, sin microservicios.
 
 ---
 
-## ✨ Características
+## Features
 
 <table>
 <tr>
 <td width="50%">
 
-### 🤖 LLM Multi-Proveedor
+### LLM Multi-Proveedor
 - **Anthropic Claude** (API directa o Vertex AI)
-- **OpenAI GPT** (GPT-4o, GPT-4, etc.)
+- **OpenAI GPT** (GPT-4o, GPT-5, etc.)
 - **Google Gemini** (Flash, Pro)
-- Fallback automático entre proveedores
+- Fallback automatico entre proveedores
 
 </td>
 <td width="50%">
 
-### 🛡️ Capas de Seguridad
-- **Prompt Guard** — WAF para prompts de LLM (detección de inyección + log de auditoría en PostgreSQL)
-- **Input Sanitizer** — Bloquea reverse shells, crypto miners, fork bombs, inyección SQL
-- **API Auth** — Autenticación basada en claves + rate limiting
-- **Telegram ACL** — Control de acceso basado en propietario
+### Capas de Seguridad
+- **Prompt Guard** — WAF para prompts LLM (deteccion de inyeccion + audit log en PostgreSQL)
+- **Input Sanitizer** — Bloquea reverse shells, crypto miners, fork bombs, SQL injection
+- **API Auth** — Autenticacion por clave + rate limiting
+- **Telegram ACL** — Control de acceso basado en owner
 
 </td>
 </tr>
 <tr>
 <td>
 
-### 🔧 30+ Herramientas Integradas
-| Categoría | Herramientas |
+### 29+ Herramientas Built-in
+| Categoria | Herramientas |
 |:----------|:-------------|
 | Sistema | `bash`, `python`, `read_file`, `write_file` |
 | Red | `curl`, `wget` |
 | Docker | `ps`, `logs`, `start/stop/restart`, `exec`, `stats` |
-| Base de Datos | `postgres_query` (protegido contra inyección SQL) |
-| SSH | `host_control` (gestión remota de servidores) |
+| Base de datos | `postgres_query` (protegido contra SQL injection) |
+| SSH | `host_control` (gestion remota de servidores) |
 | IoT | `home_assistant` (luces, sensores, automatizaciones) |
-| Cloud | `gcp_waf`, `gcp_compute` (gestión completa de GCP) |
-| DNS | `hostinger` (gestión de registros DNS) |
-| Router | `router` (gestión de OpenWrt) |
-| Túneles | `cloudflared` (túneles de Cloudflare) |
-| Documentos | `document` (generar PDF, PPTX, CSV) |
+| Cloud | `gcp_waf`, `gcp_compute` (gestion completa de GCP) |
+| DNS | `hostinger` (gestion de registros DNS) |
+| Router | `router` (gestion OpenWrt) |
+| Tuneles | `cloudflared` (tuneles Cloudflare) |
+| Docs | `document` (generar PDF, PPTX, CSV) |
 | Calendario | `calendar` (Google Calendar) |
-| Tareas | `task_orchestrator` (automatización multi-paso) |
-| Seguridad | `prompt_guard` (detección de inyección) |
+| Tareas | `task_orchestrator` (automatizacion multi-paso) |
+| **Drone** | `drone` (DJI Tello via safety proxy) |
+| **Seguridad** | `security` (nmap, vuln scan, WiFi monitor, pentest) |
+| **Cafe** | `coffee` (maquina de cafe IoT via GPIO) |
 
 </td>
 <td>
 
-### 🧠 Motor de Agente
-- Bucle de llamada a herramientas multi-ronda con reintentos automáticos
-- **Memoria de sesión** — Historial de conversación en PostgreSQL
+### Motor del Agente
+- Loop multi-ronda de tool-calling con retry automatico
+- **Memoria de sesion** — Historial de conversacion en PostgreSQL
 - **Memoria de workspace** — Notas persistentes entre sesiones
+- **Aislamiento por usuario** — Cada usuario de Telegram tiene sesiones, preferencias y memoria separadas
 - **Aprendizaje de errores** — Recuerda fallos para no repetirlos
-- **Constructor de contexto** — Prompts de sistema dinámicos basados en herramientas disponibles
-- **Watchdog de contenedores** — Reinicio automático de contenedores caídos
-- **Sistema de plugins** — Herramientas personalizadas plug-and-play
+- **Context builder** — System prompts dinamicos basados en herramientas disponibles
+- **Container watchdog** — Auto-reinicia contenedores caidos
+- **Sistema de plugins** — Herramientas custom drop-in
 
 </td>
 </tr>
@@ -139,86 +153,339 @@ TokioAI fue construido por un arquitecto de seguridad que se cansó de cambiar e
 
 ---
 
-## 📱 Tres Interfaces
+## Control de Drone
 
-<table>
-<tr>
-<td width="33%" align="center"><h3>💻 CLI</h3></td>
-<td width="33%" align="center"><h3>🌐 API REST</h3></td>
-<td width="33%" align="center"><h3>📲 Bot de Telegram</h3></td>
-</tr>
-<tr>
-<td>
+TokioAI puede volar un **drone DJI Tello** via comandos de Telegram. Todos los comandos pasan por un safety proxy en la Raspberry Pi que aplica geofencing, rate limiting y kill switch de emergencia.
 
-Terminal interactiva con formato Rich
+### Arquitectura
 
 ```
-╔══════════════════════════╗
-║  ████████╗ ██████╗  ...  ║
-║  Autonomous AI Agent v2  ║
-╚══════════════════════════╝
-
-LLM: Claude 3.5 Sonnet
-Tools: 32 disponibles
-
-🌀 tokio> _
+Telegram                  GCP (Cloud)                     Raspberry Pi 5              Drone
+┌─────────┐    ┌───────────────────────┐    ┌──────────────────────────┐    ┌──────────┐
+│  Usuario │───>│  TokioAI Agent       │───>│  Safety Proxy (:5001)    │───>│  Tello   │
+│  "des-   │    │  (Claude Opus 4)     │    │  - Geofencing            │    │  (UDP)   │
+│  pega"   │    │  drone_proxy_tools.py │    │  - Rate limiting (10/5s) │    │          │
+│          │<───│                       │<───│  - Kill switch           │    │          │
+│  "Listo, │    │                       │    │  - Auto-land (<25% bat)  │    │          │
+│   hecho" │    │                       │    │  - WiFi mgmt (nmcli)     │    │          │
+└─────────┘    └───────────────────────┘    └──────────────────────────┘    └──────────┘
+                      Tailscale VPN                   WiFi 2.4GHz
+                    (tunel cifrado)                 (WPA2 + clave 20 chars)
 ```
 
-</td>
-<td>
+### Comandos via Telegram
 
-Servidor FastAPI con autenticación y CORS
+| Comando | Accion |
+|:--------|:-------|
+| "Conecta el drone" | `wifi_connect` — La Raspi cambia al WiFi del drone |
+| "Despega" | `takeoff` — El drone despega |
+| "Mueve adelante 50cm" | `move forward 50` — Mover con distancia |
+| "Rota 90 grados" | `rotate clockwise 90` — Rotar en cualquier direccion |
+| "Patrulla en cuadrado" | `patrol square 100` — Patron de vuelo automatico |
+| "Estado de bateria" | `battery` — Verificar nivel de bateria |
+| "Aterriza" | `land` — Aterrizaje seguro |
+| "Emergencia!" | `emergency` — Kill switch instantaneo |
+| "Desconecta el drone" | `wifi_disconnect` — Volver a la red principal |
+
+### Features del Safety Proxy
+
+| Feature | Descripcion |
+|:--------|:------------|
+| **Geofencing** | 3 niveles: DEMO (1.5m altura, 2m radio, 30cm/s), NORMAL, EXPERT |
+| **Rate Limiting** | Max 10 comandos por 5 segundos |
+| **Kill Switch** | Parada instantanea de motores via `/drone/kill` |
+| **Auto-land** | Se activa: bateria <25%, timeout 20s, violacion de altura |
+| **IP Whitelist** | Solo IPs de Tailscale pueden enviar comandos |
+| **Audit Log** | Historial completo de comandos con timestamps |
+| **Gestion WiFi** | Conectar/desconectar WiFi del drone desde Telegram |
+| **Watchdog** | Thread en background monitorea la salud del drone en vuelo |
+
+### API del Drone Proxy (Raspberry Pi :5001)
+
+```
+POST /drone/command         — Ejecutar comando via safety proxy
+GET  /drone/status          — Estado del proxy + drone
+POST /drone/kill            — Parada de emergencia de motores
+POST /drone/kill/reset      — Resetear kill switch despues de emergencia
+GET  /drone/audit           — Log de auditoria de comandos
+GET  /drone/geofence        — Configuracion del geofence
+POST /drone/wifi/connect    — Cambiar Raspi al WiFi del drone
+POST /drone/wifi/disconnect — Volver a la red principal
+GET  /drone/wifi/status     — Estado actual de conexion WiFi
+```
+
+### Inicio Rapido — Volar desde Telegram
+
+```
+1. "Tokio, conecta el drone"       → Raspi cambia al WiFi del Tello
+2. "Tokio, despega"                → El drone despega
+3. "Tokio, mueve adelante 100cm"   → El drone se mueve
+4. "Tokio, patrulla en cuadrado"   → Patron automatico
+5. "Tokio, aterriza"               → Aterrizaje seguro
+6. "Tokio, desconecta el drone"    → Vuelve a la red normal
+```
+
+---
+
+## Herramientas de Seguridad Ofensivas y Defensivas
+
+TokioAI incluye un suite completo de herramientas de seguridad para pentesting autorizado, CTF y monitoreo defensivo. Todas accesibles via Telegram o CLI.
+
+### Reconocimiento de Red
 
 ```bash
-curl -X POST localhost:8000/chat \
-  -H "Authorization: Bearer KEY" \
-  -d '{"message": "list containers"}'
+# Descubrimiento rapido de red
+tokio> escanea la red 192.168.8.0/24
 
-# Respuesta:
-{
-  "response": "Running containers:\n
-    nginx (Up 3 days)\n
-    postgres (Up 3 days)",
-  "tools_used": ["docker"],
-  "tokens": 847
-}
+# Escaneo completo de puertos con deteccion de servicios
+tokio> escaneo completo en 192.168.8.1
+
+# Escaneo stealth SYN
+tokio> escaneo stealth en 10.0.0.1
+
+# Escaneo UDP
+tokio> escaneo UDP en el target
+
+# Deteccion de OS
+tokio> detecta el OS en 192.168.8.1
 ```
 
-</td>
-<td>
+**Tipos de escaneo:** `quick` (ping), `full` (version+scripts+OS), `vuln` (scripts de vulnerabilidad), `os` (deteccion de OS), `ports` (puertos especificos), `stealth` (SYN+fragmentado), `service` (deteccion profunda de servicios), `udp` (top 100 puertos UDP)
 
-Soporte multimedia completo:
-- 📷 **Imágenes** — Analizadas vía Vision API
-- 🎤 **Voz** — Transcrita vía Whisper/Gemini
-- 🎵 **Archivos de audio**
-- 📄 **Documentos** (PDF, DOCX, CSV, código)
-- 🔗 **Análisis de enlaces de YouTube**
-- 📎 **Generación de archivos** (PDF, CSV, PPTX enviados de vuelta)
+### Monitoreo de Seguridad WiFi
 
-</td>
-</tr>
-</table>
+Defensa WiFi en tiempo real desde la Raspberry Pi:
+
+```bash
+# Estado del WiFi
+tokio> chequea el estado del WiFi
+
+# Buscar amenazas (evil twins, redes abiertas)
+tokio> busca amenazas WiFi
+
+# Verificar ataques deauth
+tokio> chequea ataques deauth
+
+# Listar dispositivos conectados
+tokio> muestra dispositivos conectados
+
+# Monitoreo de senal
+tokio> monitorea la fuerza de senal
+```
+
+**Capacidades de deteccion:**
+- **Ataques deauth** — Monitorea `dmesg` y `journalctl` buscando eventos deauth/disassoc; 3+ caidas en 60s = ataque confirmado
+- **Deteccion de evil twin** — Busca SSIDs similares a tus redes
+- **Deteccion de redes abiertas** — Alerta sobre redes sin cifrado cercanas
+- **Anomalias de senal** — Varianza alta en fuerza de senal indica posible jamming
+- **Historial de conexion** — Trackea eventos de conexion/desconexion WiFi
+
+### Evaluacion de Vulnerabilidades
+
+```bash
+# Escaneo de vulnerabilidades web (headers HTTP, SSL, headers de seguridad, DNS)
+tokio> escaneo de vulnerabilidades en https://ejemplo.com tipo all
+
+# Verificacion de certificado SSL/TLS + cifrados debiles
+tokio> chequea SSL en ejemplo.com
+
+# Analisis de headers de seguridad (HSTS, CSP, X-Frame-Options, etc.)
+tokio> chequea headers de seguridad en https://ejemplo.com
+
+# Reconocimiento DNS + verificacion de zone transfer
+tokio> escaneo DNS en ejemplo.com
+```
+
+### Testing de Aplicaciones Web
+
+```bash
+# Inspeccion de headers HTTP
+tokio> testea headers en https://target.com
+
+# Enumeracion de directorios/archivos comunes
+tokio> escaneo de directorios en https://target.com
+# Chequea: /.env, /robots.txt, /.git/config, /wp-login.php, /admin,
+#           /api, /swagger.json, /graphql, /phpinfo.php, /backup.zip, etc.
+
+# Deteccion de tecnologias
+tokio> detecta tecnologia en https://target.com
+
+# Testing de misconfiguracion CORS
+tokio> testea CORS en https://target.com
+
+# Testing de metodos HTTP
+tokio> testea metodos en https://target.com
+```
+
+### Analisis de Red
+
+```bash
+# Tabla ARP (local o Raspi)
+tokio> muestra tabla ARP
+
+# Tabla de rutas
+tokio> muestra rutas
+
+# Puertos abiertos
+tokio> muestra puertos abiertos
+
+# Conexiones activas
+tokio> muestra conexiones activas
+
+# Interfaces de red
+tokio> muestra interfaces
+
+# Traceroute
+tokio> traceroute a 8.8.8.8
+
+# Reglas de firewall
+tokio> muestra reglas de firewall
+
+# Estado de Tailscale
+tokio> muestra estado de Tailscale
+```
+
+### Auditoria de Credenciales
+
+```bash
+# Analisis de fortaleza de password
+tokio> chequea la fortaleza del password "MyP@ssw0rd123"
+# Retorna: score/8, rating (WEAK/MEDIUM/STRONG/EXCELLENT),
+#           bits de entropia, checks pasados
+
+# Identificacion de tipo de hash
+tokio> identifica el hash 5f4dcc3b5aa765d61d8327deb882cf99
+# Retorna: tipos posibles (MD5, SHA-1, bcrypt, Argon2, etc.)
+
+# Auditoria de servidor SSH
+tokio> auditoria SSH en 192.168.8.1
+```
+
+### Referencia de Herramientas de Seguridad
+
+| Herramienta | Accion | Parametros |
+|:------------|:-------|:-----------|
+| `nmap` | Escaneo de red | `target`, `scan_type`, `ports` |
+| `wifi_scan` | Descubrimiento de redes WiFi | `band`, `detail` |
+| `wifi_monitor` | Monitoreo de seguridad WiFi | `action` (status/scan_threats/check_deauth/connected_devices/signal_history) |
+| `vuln_scan` | Evaluacion de vulnerabilidades | `target`, `type` (web/ssl/headers/dns/all) |
+| `web_test` | Testing de apps web | `target`, `test` (headers/dirs/tech/cors/methods/robots) |
+| `net` | Analisis de red | `action` (arp/routes/ports/connections/interfaces/tailscale/traceroute/dns/firewall) |
+| `password` | Auditoria de credenciales | `action` (strength/hash_crack/ssh_audit), `password`/`hash`/`target` |
 
 ---
 
-## 🚀 Inicio Rápido
+## Terminal SOC v2
 
-### Opción 1: Docker (la más fácil)
+Terminal de centro de operaciones de seguridad combinado con monitoreo WAF, defensa WiFi y estado del drone. Construido con Rich para renderizado live en terminal.
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    TOKIOAI SOC TERMINAL v2                              │
+│                 WAF + Defensa WiFi + Control de Drone                  │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  WAF: [LIVE] 13,443 amenazas    WiFi: [SEGURO]    Drone: [EN TIERRA]  │
+│                                                                         │
+│  ┌─ ATAQUES LIVE ─────────────┐  ┌─ DEFENSA WiFi ─────────────────┐  │
+│  │ 14:23 185.x.x SQLI /api   │  │ Senal: ████████░░ -45 dBm      │  │
+│  │ 14:22 91.x.x  XSS /search │  │ Deauth: 0 eventos              │  │
+│  │ 14:21 45.x.x  SCAN /.env  │  │ Evil twins: Ninguno            │  │
+│  │ 14:20 [WiFi] Caida senal   │  │ Estado: SEGURO PARA VOLAR      │  │
+│  └────────────────────────────┘  └─────────────────────────────────┘  │
+│                                                                         │
+│  ┌─ DRONE ────────────────────┐  ┌─ NARRADOR IA ──────────────────┐  │
+│  │ Estado: Conectado/Tierra   │  │ "Detectando campana sostenida  │  │
+│  │ Bateria: 87%               │  │  de SQLi desde Europa del Este.│  │
+│  │ Geofence: DEMO (1.5m/2m)  │  │  3 IPs bloqueadas en la ultima │  │
+│  │ Comandos: 42 (0 bloqueados)│  │  hora. Perimetro WiFi seguro." │  │
+│  └────────────────────────────┘  └─────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Ejecutar la Terminal SOC
+
+```bash
+# Modo live — conectado a WAF API + Raspi + Drone proxy
+cd tokio_cloud/gcp-live
+python3 tokio_soc_v2.py --autonomous
+
+# Modo demo — datos simulados, sin servidores
+python3 tokio_soc_v2.py --demo --autonomous
+```
+
+### Features de la Terminal SOC
+
+| Feature | Descripcion |
+|:--------|:------------|
+| **WAF Live Feed** | Stream de ataques en tiempo real desde el motor WAF |
+| **Monitor de Defensa WiFi** | SSH a la Raspi, monitorea ataques deauth, evil twins, anomalias de senal |
+| **Estado del Drone** | Bateria live, geofence, cantidad de comandos del drone proxy |
+| **Autorizacion de Vuelo** | Bloquea vuelo del drone si se detectan ataques WiFi |
+| **Narrador IA Autonomo** | Tokio analiza WAF + WiFi + drone y narra en tiempo real |
+| **Timeline Unificada** | Ataques WAF y eventos WiFi en una vista cronologica unica |
+| **Panel de Stats** | Total de amenazas, IPs bloqueadas, episodios activos, comandos del drone |
+
+---
+
+## Sistema de Entidad Raspi
+
+TokioAI corre como una entidad de IA animada en la Raspberry Pi 5 con pantalla HDMI — una cara que reacciona al mundo que la rodea.
+
+### Componentes
+
+| Modulo | Descripcion |
+|:-------|:------------|
+| `main.py` | Clase TokioEntity — cara fullscreen, PiP de camara, sidebar WAF, voz, monitor de drone |
+| `tokio_face.py` | Cara animada — marco hexagonal, ojos rectangulares, escala a cualquier pantalla |
+| `vision_engine.py` | Inferencia Hailo-8L YOLOv8, captura de camara, deteccion de objetos |
+| `face_db.py` | Reconocimiento facial SQLite — embeddings por histograma, roles (admin/friend/visitor) |
+| `gesture_detector.py` | Deteccion de gestos — OpenCV convex hull (paz, cuernos, OK, pulgar arriba) |
+| `security_feed.py` | Poll al API WAF de GCP, mapea severidad de ataques a emociones de Tokio |
+| `api_server.py` | API Flask :5000 — /status, /snapshot, /face/register, /face/list |
+| `drone_safety_proxy.py` | Proxy del drone :5001 + gestion WiFi (servicio systemd) |
+
+### Emociones de Tokio
+
+La cara reacciona a lo que pasa:
+- **Calmo** — Sin amenazas, operacion normal
+- **Alerta** — Ataques WAF de severidad media
+- **Enojado** — Ataques criticos o DDoS en curso
+- **Feliz** — Reconoce una cara conocida (admin/amigo)
+- **Curioso** — Persona nueva detectada, analizando
+- **Emocionado** — Drone despegando, ejecutando comandos
+- **Preocupado** — Bateria baja del drone, interferencia WiFi
+
+### Lanzar en la Raspi
+
+```bash
+# Tokio UI (cara fullscreen + camara + WAF + drone)
+export XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-0 SDL_VIDEODRIVER=wayland
+cd /home/mrmoz && python3 -m tokio_raspi --api
+
+# Proxy del drone (systemd, auto-inicia en boot)
+sudo systemctl start tokio-drone-proxy
+
+# Conexion/desconexion manual del WiFi del drone
+./drone-on.sh
+./drone-off.sh
+```
+
+---
+
+## Inicio Rapido
+
+### Opcion 1: Docker (mas facil)
 
 ```bash
 git clone https://github.com/TokioAI/tokioai-v1.8.git tokioai
 cd tokioai
 cp .env.example .env
-
-# Editá .env — configurá al menos ANTHROPIC_API_KEY (o OPENAI_API_KEY o GEMINI_API_KEY)
-nano .env
-
+nano .env   # Configurar al menos ANTHROPIC_API_KEY
 docker compose up -d
 ```
 
-Esto levanta 3 contenedores: **PostgreSQL**, **TokioAI API** (puerto 8200) y **Bot de Telegram** (si está configurado).
-
-### Opción 2: Asistente de Configuración
+### Opcion 2: Setup Wizard
 
 ```bash
 git clone https://github.com/TokioAI/tokioai-v1.8.git tokioai
@@ -228,551 +495,185 @@ pip install -e .
 tokio setup
 ```
 
-> El asistente te guía a través del proveedor de LLM, base de datos, Telegram y funciones opcionales — luego genera `.env` y `docker-compose.yml`.
-
-### Opción 3: Configuración Manual
+### Opcion 3: Setup Manual
 
 ```bash
 git clone https://github.com/TokioAI/tokioai-v1.8.git tokioai
 cd tokioai
-
 cp .env.example .env
-# Editá .env — configurá tu API key
-
 python3 -m venv venv && source venv/bin/activate
 pip install -e .
-
-# CLI interactiva
-tokio
-
-# O iniciar el servidor API
-tokio server
+tokio        # CLI interactiva
+tokio server # Servidor API
 ```
-
-### Comandos CLI
-
-```bash
-tokio              # Sesión de chat interactiva
-tokio server       # Iniciar servidor API REST
-tokio setup        # Ejecutar asistente de configuración
-tokio status       # Mostrar estado del agente e infraestructura
-tokio tools        # Listar herramientas disponibles
-tokio "message"    # Modo de mensaje único (no interactivo)
-```
-
-### CLI Remoto (Docker / deployments en la nube)
-
-Si TokioAI corre dentro de un contenedor Docker (local o VM en la nube), usá `docker exec`:
-
-```bash
-# Sesión interactiva (backspace, flechas e historial funcionan)
-docker exec -it tokio-agent python3 -m tokio_agent.cli
-
-# Mensaje único
-docker exec tokio-agent python3 -m tokio_agent.cli "listame los containers"
-
-# Chequeo de estado
-docker exec tokio-agent python3 -m tokio_agent.cli status
-```
-
-Por SSH (ej: a una VM en la nube):
-
-```bash
-# Sesión interactiva — el flag -t es necesario para soporte de terminal
-ssh -t user@tu-servidor "docker exec -it tokio-agent python3 -m tokio_agent.cli"
-
-# Mensaje único
-ssh user@tu-servidor "docker exec tokio-agent python3 -m tokio_agent.cli 'estado del WAF'"
-```
-
-Comandos dentro del CLI interactivo: `/tools`, `/status`, `/clear`, `/exit`.
 
 ---
 
-## ⚙️ Configuración
+## Configuracion
 
-Toda la configuración es mediante variables de entorno. Copiá `.env.example` a `.env` y completá tus valores.
+Toda la configuracion es via variables de entorno. Copiar `.env.example` a `.env` y completar los valores.
 
 ### Requeridas
 
-| Variable | Descripción |
+| Variable | Descripcion |
 |:---------|:------------|
-| `LLM_PROVIDER` | `anthropic`, `openai` o `gemini` |
-| `ANTHROPIC_API_KEY` | Clave API de Claude (o usá Vertex AI) |
-| `POSTGRES_PASSWORD` | Contraseña de PostgreSQL |
+| `LLM_PROVIDER` | `anthropic`, `openai`, o `gemini` |
+| `ANTHROPIC_API_KEY` | Clave API de Claude (o usar Vertex AI) |
+| `POSTGRES_PASSWORD` | Password de PostgreSQL |
 
-### LLM vía Vertex AI (opcional — para Claude en GCP)
+### Opcionales
 
-> Solo necesario si preferís usar Claude a través de Google Cloud en lugar de la API directa de Anthropic.
-
-| Variable | Descripción |
+| Variable | Descripcion |
 |:---------|:------------|
-| `USE_ANTHROPIC_VERTEX` | `true` para usar Vertex AI |
-| `GCP_PROJECT_ID` | Tu proyecto de GCP |
-| `GOOGLE_APPLICATION_CREDENTIALS` | Ruta al JSON de la cuenta de servicio |
-| `ANTHROPIC_VERTEX_REGION` | Región (ej., `us-east5`) |
+| `TELEGRAM_BOT_TOKEN` | Token del bot de Telegram (@BotFather) |
+| `TELEGRAM_OWNER_ID` | Tu user ID de Telegram |
+| `DRONE_PROXY_URL` | URL del drone safety proxy (default: `http://YOUR_RASPI_TAILSCALE_IP:5001`) |
+| `RASPI_IP` | IP de Tailscale de la Raspberry Pi (default: `YOUR_RASPI_TAILSCALE_IP`) |
 
-### Funciones Opcionales
-
-| Variable | Descripción |
-|:---------|:------------|
-| `TELEGRAM_BOT_TOKEN` | Token del bot de Telegram de @BotFather |
-| `TELEGRAM_OWNER_ID` | Tu ID de usuario de Telegram |
-| `HOST_SSH_HOST` | Servidor remoto para control SSH |
-| `HOME_ASSISTANT_URL` | URL de la instancia de Home Assistant |
-| `CLOUDFLARE_API_TOKEN` | Token de API de Cloudflare |
-| `HOSTINGER_API_TOKEN` | Token de API DNS de Hostinger |
-
-Consultá `.env.example` para la lista completa.
+Ver `.env.example` para la lista completa.
 
 ---
 
-## 🏗️ Arquitectura
-
-<div align="center">
-
-<img src="docs/tokioai-architecture.png" alt="Arquitectura TokioAI — Agente ReAct vs Message Gateway" width="800">
-
-*TokioAI es un agente autonomo ReAct — no un router de mensajes. [Comparacion completa con OpenClaw](docs/tokioai-architecture.svg)*
-
-</div>
-
-### Arquitectura Detallada
+## Arquitectura
 
 ```
                          ┌─────────────────┐
-                         │   Bot Telegram   │
-                         │  (multimedia,    │
-                         │   voz, imágenes) │
+                         │    Telegram Bot  │
                          └────────┬────────┘
                                   │
   ┌───────────┐           ┌───────┴───────┐           ┌─────────────────┐
-  │           │           │               │           │  Bucle Agente   │
-  │    CLI    │──────────>│   FastAPI      │──────────>│  (llamada a     │
-  │  (Rich)   │           │   Server      │           │   herramientas  │
-  │           │           │               │           │   multi-ronda)  │
+  │    CLI    │──────────>│   FastAPI      │──────────>│   Agent Loop    │
   └───────────┘           └───────────────┘           └────────┬────────┘
                                                                │
-                                                    ┌──────────┴──────────┐
-                                                    │  Ejecutor de Htas.  │
-                                                    │  ┌────────────────┐ │
-                                                    │  │ Circuit Breaker│ │
-                                                    │  │ Timeouts       │ │
-                                                    │  │ Recuperación   │ │
-                                                    │  └────────────────┘ │
-                                                    └──────────┬──────────┘
-                                                               │
-                    ┌──────────────┬───────────────┬───────────┼──────────────┐
-                    │              │               │           │              │
-              ┌─────┴────┐  ┌─────┴─────┐  ┌─────┴────┐ ┌────┴─────┐ ┌─────┴─────┐
-              │ Sistema  │  │  Docker   │  │ Base de  │ │   SSH    │ │   Cloud   │
-              │ bash     │  │ ps/logs   │  │  Datos   │ │ host_ctl │ │ gcp_waf   │
-              │ python   │  │ restart   │  │ postgres │ │ curl     │ │ IoT/DNS   │
-              │ files    │  │ exec      │  │ query    │ │ wget     │ │ tunnels   │
-              └──────────┘  └───────────┘  └──────────┘ └──────────┘ └───────────┘
+          ┌──────────┬──────────┬──────────┬──────────┬────────┼────────┐
+          │          │          │          │          │        │        │
+    ┌─────┴───┐ ┌───┴────┐ ┌──┴─────┐ ┌──┴────┐ ┌──┴───┐ ┌──┴──┐ ┌──┴──┐
+    │ Sistema │ │ Docker │ │  BBDD  │ │  SSH  │ │Cloud │ │Drone│ │Sec. │
+    │ bash    │ │ ps/log │ │postgres│ │host_ct│ │gcp   │ │proxy│ │nmap │
+    │ python  │ │restart │ │ query  │ │ curl  │ │IoT   │ │tello│ │vuln │
+    │ files   │ │ exec   │ │        │ │ wget  │ │DNS   │ │wifi │ │wifi │
+    └─────────┘ └────────┘ └────────┘ └───────┘ └──────┘ └─────┘ └─────┘
 
-                    ┌──────────────────────────────────────────────────────┐
-                    │               Capas de Seguridad                    │
-                    │  ┌──────────────┐  ┌──────────────┐  ┌───────────┐ │
-                    │  │ Prompt Guard │  │   Input      │  │  Canal    │ │
-                    │  │ (WAF para    │  │  Sanitizer   │  │  Seguro   │ │
-                    │  │  prompts)    │  │ (filtro cmd) │  │ (API auth)│ │
-                    │  └──────────────┘  └──────────────┘  └───────────┘ │
-                    └──────────────────────────────────────────────────────┘
+          ┌──────────────────────────────────────────────────────┐
+          │               Capas de Seguridad                    │
+          │  ┌──────────────┐  ┌──────────────┐  ┌───────────┐ │
+          │  │ Prompt Guard │  │   Input      │  │  Secure   │ │
+          │  │ (WAF para    │  │  Sanitizer   │  │  Channel  │ │
+          │  │  prompts)    │  │ (filtro cmd) │  │ (auth API)│ │
+          │  └──────────────┘  └──────────────┘  └───────────┘ │
+          └──────────────────────────────────────────────────────┘
 
-                    ┌──────────────────────────────────────────────────────┐
-                    │                   Persistencia                      │
-                    │  ┌──────────────┐  ┌──────────────┐  ┌───────────┐ │
-                    │  │  Memoria de  │  │  Memoria de  │  │Aprendizaje│ │
-                    │  │   Sesión     │  │  Workspace   │  │ de Errores│ │
-                    │  │ (PostgreSQL) │  │(entre sesión)│  │ (fallos)  │ │
-                    │  └──────────────┘  └──────────────┘  └───────────┘ │
-                    └──────────────────────────────────────────────────────┘
+          ┌──────────────────────────────────────────────────────┐
+          │                   Capa de Hardware                  │
+          │  ┌──────────────┐  ┌──────────────┐  ┌───────────┐ │
+          │  │ Raspberry Pi │  │  DJI Tello   │  │  Maquina  │ │
+          │  │ Cara + Camera│  │  Drone       │  │  de Cafe  │ │
+          │  │ Hailo-8L AI  │  │  (via proxy) │  │  (GPIO)   │ │
+          │  └──────────────┘  └──────────────┘  └───────────┘ │
+          └──────────────────────────────────────────────────────┘
 ```
-
-### Módulos Clave
-
-| Módulo | Descripción | Líneas |
-|:-------|:------------|-------:|
-| `engine/agent.py` | Bucle de agente multi-ronda con llamada a herramientas | 462 |
-| `engine/tools/executor.py` | Ejecución asíncrona con timeouts y circuit breaker | 210 |
-| `engine/tools/builtin/loader.py` | Registra todas las 30+ herramientas integradas | 542 |
-| `engine/security/prompt_guard.py` | WAF de inyección de prompts con log de auditoría en PostgreSQL | 223 |
-| `engine/security/input_sanitizer.py` | Sanitización de comandos/SQL/rutas | 161 |
-| `engine/memory/session.py` | Persistencia de conversaciones | 152 |
-| `engine/memory/workspace.py` | Memoria persistente entre sesiones | 283 |
-| `engine/llm/` | Abstracción de LLM multi-proveedor | 6 archivos |
-| `bots/telegram_bot.py` | Bot de Telegram multimedia completo | 1127 |
-| `setup_wizard.py` | Asistente de configuración interactivo | 707 |
 
 ---
 
-## 🔒 Seguridad
+## Seguridad
 
-TokioAI tiene **tres capas de seguridad** que protegen contra inyección de prompts, comandos peligrosos y acceso no autorizado:
+TokioAI tiene **tres capas de seguridad**:
 
 ### Capa 1: Prompt Guard (WAF para LLM)
-Detecta y bloquea ataques de inyección de prompts **antes** de que lleguen al LLM:
-- Intentos de sobreescritura de rol (`"ignore previous instructions"`)
-- Extracción de system prompt (`"print your system prompt"`)
-- Inyección de delimitadores (`"```system"`, `"<|endoftext|>"`)
-- Ataques por encoding (inyecciones codificadas en base64/hex)
-- Patrones de abuso de herramientas (`"call bash with rm -rf"`)
-
-Todos los intentos se registran en PostgreSQL con timestamp, nivel de riesgo, categorías y vista previa del input.
+Detecta y bloquea inyeccion de prompts **antes** de que lleguen al LLM:
+- Intentos de override de rol (`"ignora las instrucciones anteriores"`)
+- Extraccion de system prompt (`"imprime tu system prompt"`)
+- Inyeccion de delimitadores
+- Ataques de encoding (base64/hex)
+- Patrones de abuso de herramientas
 
 ### Capa 2: Input Sanitizer
-Bloquea comandos peligrosos **antes** de la ejecución de herramientas:
-- Reverse shells (`nc -e`, `bash -i`)
-- Crypto miners (`xmrig`, `stratum://`)
-- Fork bombs (`:(){ :|:& };:`)
-- Comandos destructivos (`rm -rf /`, `mkfs`, `dd if=/dev/zero`)
-- Inyección SQL (`'; DROP TABLE`)
-- Path traversal (`../../etc/passwd`)
+Bloquea comandos peligrosos **antes** de la ejecucion:
+- Reverse shells, crypto miners, fork bombs
+- Comandos destructivos (`rm -rf /`, `mkfs`)
+- SQL injection, path traversal
 
-### Capa 3: Canal Seguro
-- Autenticación por API key para endpoints REST
+### Capa 3: Secure Channel
+- Autenticacion por API key
 - Rate limiting por cliente
-- ACL de Telegram con comandos de administrador solo para el propietario
+- ACL de Telegram con control de owner
+- Aislamiento de sesiones por usuario
 
 ---
 
-## 🚢 Modos de Despliegue
+## WAF Dashboard (Opcional)
 
-El asistente de configuración (`tokio setup`) te permite elegir cómo desplegar:
+TokioAI incluye un **Web Application Firewall** completo con dashboard SOC cyberpunk.
 
-| Modo | Qué corre localmente | Qué corre en la nube | Ideal para |
-|:-----|:----------------------|:---------------------|:-----------|
-| **1. Full Local** (predeterminado) | Todo — CLI, API, bot de Telegram, PostgreSQL | Nada | Desarrollo, testing, uso personal |
-| **2. Híbrido** | CLI de TokioAI + herramientas | WAF, Kafka, PostgreSQL en GCP | Producción con control local del agente |
-| **3. Full Cloud** | Nada | Todo en GCP | Servidores headless, máxima disponibilidad |
+| Feature | Descripcion |
+|:--------|:------------|
+| **25 firmas WAF** | SQLi, XSS, command injection, path traversal, Log4Shell, SSRF |
+| **7 reglas de comportamiento** | Rate limiting, fuerza bruta, deteccion de scanners, honeypots |
+| **Deteccion en tiempo real** | Pipeline Nginx -> Kafka -> Realtime Processor |
+| **Reputacion de IP** | Score por IP en PostgreSQL |
+| **Correlacion multi-fase** | Recon -> Probe -> Exploit -> Exfil |
+| **Auto-blocking** | Bloqueo instantaneo en firmas criticas (confidence >= 0.90) |
+| **Honeypots** | `/wp-admin`, `/phpmyadmin`, `/.env` falsos |
+| **Detector zero-day** | Deteccion por entropia de Shannon (sin ML) |
+| **Shield DDoS** | Mitigacion multi-capa sin Cloudflare |
+| **Terminal SOC v1** | UI de monitoreo solo WAF |
+| **Terminal SOC v2** | WAF + Defensa WiFi + Drone + Narrador IA |
 
-> **Nota:** El Modo 1 es el predeterminado y funciona perfectamente sin ninguna cuenta cloud. Los módulos WAF/GCP (`tokio_cloud/`) son completamente opcionales — el agente core, CLI, API y bot de Telegram funcionan 100% de forma independiente.
-
-### Tailscale Mesh — Conecta con Cualquier Hardware
-
-En modo **Full Cloud**, TokioAI puede controlar hardware local (Raspberry Pi, routers, dispositivos IoT) a traves de una mesh VPN [Tailscale](https://tailscale.com):
-
-- **Costo cero** — El tier gratis de Tailscale cubre hasta 100 dispositivos
-- **Zero config** — Solo `curl -fsSL https://tailscale.com/install.sh | sh && tailscale up`
-- **Auto-reconexion** — Cambia de red, reinicia, cambia ISP — simplemente funciona
-- **Subnet routing** — Accede a toda tu LAN (routers, impresoras, NAS) desde la nube
-- **Sin puertos expuestos** — Todo el acceso via Telegram, sin endpoints publicos
-
-Para instrucciones de setup, ver [`docs/TAILSCALE-MESH_ES.md`](docs/TAILSCALE-MESH_ES.md).
-
-### Home Assistant — Control de Dispositivos IoT
-
-TokioAI controla dispositivos IoT (luces, enchufes, aspiradora, Alexa, sensores) a traves de la API REST de Home Assistant. Un **whitelist estricto de dispositivos** previene el control accidental de entidades no deseadas.
-
-Para instrucciones de setup, ver [`docs/HOME-ASSISTANT_ES.md`](docs/HOME-ASSISTANT_ES.md).
-
----
-
-## 🌐 Dashboard WAF (Opcional)
-
-> **Esta sección es opcional.** El agente core de TokioAI funciona perfectamente sin el WAF. Desplegá el WAF solo si querés proteger una aplicación web con detección de ataques en tiempo real.
-
-TokioAI incluye un **Web Application Firewall** completo con un dashboard SOC de temática cyberpunk.
-
-### Características del Dashboard
-
-```
-┌──────────────────────────────────────────────────────────────────────┐
-│  ◉ TokioAI WAF          v3-supreme                  ● LIVE    🔄  │
-├──────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐  │
-│  │Solicitudes│ │Bloqueados│ │ Únicos   │ │ Críticos │ │Episodios │  │
-│  │  12,847  │ │    342   │ │  1,205   │ │     47   │ │     12   │  │
-│  │  ▲ 23%   │ │          │ │          │ │          │ │          │  │
-│  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘  │
-│                                                                      │
-│  ┌────────────────────────────────────┐ ┌──────────────────────┐    │
-│  │  📊 Línea de Tiempo de Tráfico   │ │ 🛡️ OWASP Top 10     │    │
-│  │  ████                      ██     │ │                      │    │
-│  │  █████                    ████    │ │  A01  Broken Access  │    │
-│  │  ██████      ███         ██████   │ │  A03  Injection      │    │
-│  │  ████████  ██████  ████ ████████  │ │  A07  XSS            │    │
-│  │  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓  │ │  A10  SSRF           │    │
-│  └────────────────────────────────────┘ └──────────────────────┘    │
-│                                                                      │
-│  ┌────────────────────────────────────┐ ┌──────────────────────┐    │
-│  │  🌍 Origen de Ataques (Mapa)     │ │ 🔴 ATAQUES EN VIVO   │    │
-│  │                                    │ │                      │    │
-│  │     ·  ··                          │ │ ● 45.33.x.x SQLI    │    │
-│  │    ·    ···   ····  ····           │ │   /api/users?id=1'   │    │
-│  │          ··    ··   · ·            │ │                      │    │
-│  │      ·                     🎯      │ │ ● 91.xx.x.x XSS     │    │
-│  │       ·                            │ │   /search?q=<script> │    │
-│  │                 ·                  │ │                      │    │
-│  │               ·                    │ │ ● 185.x.x.x SCAN    │    │
-│  └────────────────────────────────────┘ │   /.env              │    │
-│                                         └──────────────────────┘    │
-│  ┌──────────────────────────────────────────────────────────────┐    │
-│  │ 📊 Tráfico │ 📋 Episodios │ 🚫 Bloqueados │ 🏆 Top IPs  │    │
-│  │ 🔍 Firmas │ ⛓️ Kill Chain │ 📝 Auditoría                  │    │
-│  ├──────────────────────────────────────────────────────────────┤    │
-│  │ Hora      IP            Método  URI           Sev    Amenaza│    │
-│  │ 14:23:01  45.33.32.x    GET     /api/users    HIGH   SQLI   │    │
-│  │ 14:22:58  91.108.x.x    POST    /login        CRIT   BRUTE  │    │
-│  │ 14:22:45  185.220.x.x   GET     /.env         HIGH   SCAN   │    │
-│  │ 14:22:30  23.94.x.x     GET     /wp-admin     MED    PROBE  │    │
-│  └──────────────────────────────────────────────────────────────┘    │
-└──────────────────────────────────────────────────────────────────────┘
-```
-
-### Características del Motor WAF
-
-| Característica | Descripción |
-|:---------------|:------------|
-| **25 Firmas WAF** | Inyección SQL, XSS, inyección de comandos, path traversal, Log4Shell, SSRF y más |
-| **7 Reglas de Comportamiento** | Rate limiting, detección de fuerza bruta, detección de scanners, trampas honeypot |
-| **Detección en Tiempo Real** | Pipeline Nginx → Kafka → Procesador en Tiempo Real |
-| **Reputación de IP** | Seguimiento de reputación por puntaje por IP en PostgreSQL |
-| **Correlación Multi-fase** | Detección de cadena de ataque Recon → Probe → Exploit → Exfil |
-| **Bloqueo Automático** | Bloqueo instantáneo en firmas críticas (confianza ≥ 0.90) |
-| **Endpoints Honeypot** | `/wp-admin`, `/phpmyadmin`, `/.env` falsos que marcan atacantes al instante |
-| **Integración GeoIP** | Mapeo de origen de ataques vía DB-IP |
-| **Inteligencia de Amenazas** | Integración con AbuseIPDB para consultas de reputación de IP |
-| **Feed SSE en Vivo** | Flujo de ataques en tiempo real vía Server-Sent Events |
-| **Mapa de Calor de Ataques** | Visualización de amenazas por hora del día × día de la semana |
-| **Exportación CSV** | Exportar logs filtrados para análisis |
-| **Detector Zero-Day por Entropía** | Detecta payloads ofuscados que evaden firmas regex usando entropía de Shannon, densidad de URL-encoding y análisis de capas de encoding. O(n) por request, <0.1ms, sin ML |
-| **DDoS Shield Autónomo** | Mitigación DDoS multi-capa sin Cloudflare: iptables/ipset (kernel) + GCP Firewall (red) + nginx blocklist (app). 7 protecciones anti-falso-positivo, bloqueo con TTL progresivo |
-| **Terminal SOC** | Interfaz de terminal Rich para monitoreo de seguridad en vivo con modo de narración autónoma por IA. Diseñado para pantallas SOC y demos en conferencias |
-
-### Detector Zero-Day por Entropía (`zero_day_entropy.py`)
-
-Detecta payloads de ataque ofuscados/codificados que las firmas regex del WAF no pueden capturar:
-
-```
-Capas de detección:
-  1. Entropía de Shannon — payloads ofuscados tienen alta entropía (>4.5)
-  2. Contador de capas de encoding — detección de doble/triple encoding (17 patrones)
-  3. Densidad de URL-encoding — URLs normales: 0-10%, ataques: 30-80%+
-  4. Anomalía de ratio de caracteres — chars especiales vs alfanuméricos
-  5. Profundidad estructural — patrones de encoding anidados
-
-Rendimiento: 9,500+ payloads/seg, <0.1ms promedio, cero I/O, cero modelo ML.
-```
-
-Ejemplos de payloads detectados:
-- SQLi con doble/triple URL-encoding (`%2527%2520OR%2520...`)
-- Ofuscación JNDI (`${lower:j}${lower:n}${lower:d}${lower:i}`)
-- Path traversal con UTF-8 overlong (`%c0%ae%c0%ae%c0%af...`)
-- XSS codificado en Base64 en parámetros de query
-- Ofuscación CharCode (`String.fromCharCode(...)`)
-
-### DDoS Shield v2 (`ddos_shield.py`)
-
-Mitigación DDoS autónoma — **cero dependencias externas** (no requiere Cloudflare):
-
-```
-Capa 0: GCP Firewall     — Bloqueo a nivel de red (antes de que el tráfico llegue a la VM)
-Capa 1: iptables/ipset   — Rate limiting a nivel kernel (50 conn/s por IP)
-Capa 2: nginx             — Rate limiting a nivel aplicación (10 req/s por IP)
-Capa 3: DDoS Shield       — Detección inteligente + auto-bloqueo
-```
-
-Protecciones anti-falso-positivo:
-- Whitelist hardcodeada (localhost, Docker, Tailscale mesh, GCP health checks)
-- Whitelist configurable via env vars `DDOS_WHITELIST` y `OWNER_IPS`
-- Multiplicador 2x para User-Agents amigables (Googlebot, Bingbot, etc.)
-- Verificación de tasa sostenida (ventana de 10s — bloquea solo abuso persistente)
-- Filtro de targeting por URI (paths comunes necesitan 4x más IPs para activar)
-- TTL progresivo: 5min → 30min → 2h → 24h (según cantidad de ofensas)
-- Máximo 500 IPs bloqueadas (evicción automática de las más antiguas)
-
-### Terminal SOC (`soc_terminal.py`)
-
-Terminal de monitoreo de seguridad en vivo con paneles Rich:
-
-```bash
-# Conectado al dashboard en vivo:
-python3 soc_terminal.py --api http://TU_SERVIDOR --user admin --pass SECRET --autonomous
-
-# Modo demo (datos simulados, no necesita servidor):
-python3 soc_terminal.py --demo
-```
-
-Características:
-- Tabla de ataques en vivo con íconos de severidad y clasificación OWASP
-- Panel Zero-Day Radar con animación de escaneo
-- Estado del DDoS Shield con gráfico de barras RPS
-- Estadísticas del sistema (requests, amenazas, bloqueos, episodios)
-- Panel de IPs bloqueadas con countdown de TTL
-- **Modo narración autónoma** — Tokio analiza patrones, tendencias y nuevas amenazas en tiempo real y las narra sin intervención humana
-
-### Despliegue del WAF (Opcional)
-
-El WAF puede desplegarse en cualquier máquina (local, VPS o VM de GCP):
+### Deploy del WAF
 
 ```bash
 cd tokio_cloud/gcp-live
 cp .env.example .env
-# Editá .env — configurá tu dominio, IP del backend y contraseñas
 nano .env
-
 docker compose up -d
 ```
 
-Despliega **7 contenedores**: PostgreSQL, Zookeeper, Kafka, Nginx WAF proxy, procesador de logs, detector de ataques en tiempo real, API del Dashboard SOC.
-
-> **Requisitos:** Un servidor con Docker, un dominio apuntando a él y un backend para proteger. No se necesita cuenta de GCP — funciona en cualquier VPS o máquina local.
+Despliega **7 contenedores**: PostgreSQL, Zookeeper, Kafka, Nginx WAF proxy, Log processor, Realtime attack detector, SOC Dashboard API.
 
 ---
 
-## 🔌 Agregar Herramientas Personalizadas
-
-### Método 1: Herramienta Integrada
-
-Creá un archivo en `tokio_agent/engine/tools/builtin/`:
-
-```python
-# my_tools.py
-import logging
-
-logger = logging.getLogger(__name__)
-
-async def my_custom_tool(action: str, params: dict = None) -> str:
-    """Tu lógica de herramienta personalizada."""
-    params = params or {}
-    if action == "hello":
-        return f"Hello, {params.get('name', 'world')}!"
-    return f"Unknown action: {action}"
-```
-
-Registrala en `loader.py`:
-
-```python
-from .my_tools import my_custom_tool
-
-registry.register(
-    name="my_tool",
-    description="My custom tool",
-    category="Custom",
-    parameters={"action": "Action to perform", "params": "Additional parameters"},
-    executor=my_custom_tool,
-)
-```
-
-### Método 2: Plugin (Hot-reload)
-
-Dejá un archivo Python en `workspace/plugins/` — se auto-descubre al iniciar:
-
-```python
-# workspace/plugins/weather.py
-TOOL_NAME = "weather"
-TOOL_DESCRIPTION = "Get current weather for a city"
-TOOL_PARAMETERS = {"city": "City name"}
-TOOL_CATEGORY = "Custom"
-
-async def execute(city: str) -> str:
-    import httpx
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(f"https://wttr.in/{city}?format=3")
-        return resp.text
-```
-
----
-
-## 📡 Endpoints de la API
-
-| Método | Ruta | Descripción |
-|:-------|:-----|:------------|
-| `POST` | `/chat` | Enviar un mensaje y obtener una respuesta |
-| `GET` | `/health` | Verificación de salud |
-| `GET` | `/tools` | Listar herramientas disponibles |
-| `GET` | `/sessions` | Listar sesiones |
-| `DELETE` | `/sessions/{id}` | Eliminar una sesión |
-
-### Ejemplo
-
-```bash
-curl -X POST http://localhost:8000/chat \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_API_KEY" \
-  -d '{"message": "list running docker containers", "session_id": "my-session"}'
-```
-
-**Respuesta:**
-```json
-{
-  "response": "Here are the running containers:\n\n| Name | Status | Ports |\n|------|--------|-------|\n| nginx | Up 3 days | 80, 443 |\n| postgres | Up 3 days | 5432 |",
-  "tools_used": ["docker"],
-  "rounds": 1,
-  "tokens_used": 847,
-  "session_id": "my-session"
-}
-```
-
----
-
-## 📁 Estructura del Proyecto
+## Estructura del Proyecto
 
 ```
 tokioai/
 ├── tokio_agent/
 │   ├── cli.py                         # CLI interactiva con Rich
-│   ├── setup_wizard.py                # Asistente de configuración (tokio setup)
-│   ├── api/
-│   │   └── server.py                  # Servidor REST FastAPI
-│   ├── bots/
-│   │   ├── telegram_bot.py            # Bot de Telegram (multimedia)
-│   │   └── Dockerfile.telegram
+│   ├── setup_wizard.py                # Wizard de setup
+│   ├── api/server.py                  # Servidor FastAPI REST
+│   ├── bots/telegram_bot.py           # Bot Telegram (multimedia)
 │   └── engine/
-│       ├── agent.py                   # Bucle de agente (multi-ronda)
-│       ├── context_builder.py         # Constructor dinámico de system prompt
-│       ├── db.py                      # Helpers de PostgreSQL
-│       ├── error_learner.py           # Aprendizaje de errores
-│       ├── watchdog.py                # Watchdog de salud de contenedores
-│       ├── llm/                       # Proveedores de LLM
-│       │   ├── anthropic_llm.py       #   Claude (directo + Vertex AI)
-│       │   ├── openai_llm.py          #   GPT-4o, GPT-4
-│       │   └── gemini_llm.py          #   Gemini Flash, Pro
+│       ├── agent.py                   # Loop del agente (multi-ronda)
+│       ├── llm/                       # Proveedores LLM
 │       ├── memory/                    # Capa de persistencia
-│       │   ├── session.py             #   Historial de conversación
-│       │   └── workspace.py           #   Memoria entre sesiones
 │       ├── security/                  # Capas de seguridad
-│       │   ├── prompt_guard.py        #   WAF para prompts de LLM
-│       │   ├── input_sanitizer.py     #   Sanitización de comandos
-│       │   └── secure_channel.py      #   Autenticación de API
-│       └── tools/
-│           ├── registry.py            # Registro de herramientas
-│           ├── executor.py            # Ejecutor asíncrono + circuit breaker
-│           ├── plugins/               # Auto-carga de plugins
-│           └── builtin/               # 30+ herramientas integradas
-│               ├── loader.py          #   Registro de herramientas
-│               ├── system_tools.py    #   bash, python, archivos
-│               ├── docker_tools.py    #   Gestión de Docker
-│               ├── db_tools.py        #   Consultas PostgreSQL
-│               ├── gcp_tools.py       #   GCP WAF + Compute
-│               ├── host_tools.py      #   Control remoto SSH
-│               ├── iot_tools.py       #   Home Assistant
-│               └── ...                #   + 10 archivos de herramientas más
-├── tokio_cloud/                       # ⚡ Despliegue WAF (100% OPCIONAL)
-│   ├── gcp-live/                      # Stack WAF de producción
-│   │   ├── docker-compose.yml         #   Stack de 7 contenedores
-│   │   ├── dashboard-app.py           #   Dashboard SOC (1385 líneas)
-│   │   ├── realtime-processor.py      #   Motor WAF v5 (980+ líneas)
-│   │   ├── zero_day_entropy.py        #   Detector zero-day (entropía)
-│   │   ├── ddos_shield.py             #   Mitigación DDoS (autónomo)
-│   │   ├── soc_terminal.py            #   Terminal SOC (Rich)
-│   │   ├── nginx.conf                 #   Reverse proxy + rate limiting
-│   │   └── deploy.sh                  #   Script de despliegue
-│   └── waf-deployment/                # Docs de setup WAF + ModSecurity
-├── tests/                             # Suite de tests (10 archivos de test)
+│       └── tools/builtin/             # 29+ herramientas built-in
+│           ├── loader.py              #   Registro de herramientas
+│           ├── drone_proxy_tools.py   #   Drone via safety proxy
+│           ├── security_tools.py      #   Herramientas de pentest
+│           ├── coffee_tools.py        #   Maquina de cafe IoT
+│           └── ...                    #   + mas archivos de tools
+├── tokio_raspi/                       # Sistema de entidad Raspberry Pi
+│   ├── main.py                        #   TokioEntity (cara+camara+WAF+drone)
+│   ├── tokio_face.py                  #   Renderizado de cara animada
+│   ├── vision_engine.py               #   Inferencia Hailo-8L YOLOv8
+│   ├── face_db.py                     #   Reconocimiento facial (SQLite)
+│   ├── gesture_detector.py            #   Deteccion de gestos
+│   ├── drone_safety_proxy.py          #   Proxy del drone (:5001)
+│   └── api_server.py                  #   API Flask (:5000)
+├── tokio_cloud/                       # Deploy WAF (100% OPCIONAL)
+│   └── gcp-live/
+│       ├── docker-compose.yml         #   Stack de 7 contenedores
+│       ├── tokio_soc_v2.py            #   Terminal SOC v2
+│       ├── zero_day_entropy.py        #   Detector zero-day
+│       └── ddos_shield.py             #   Mitigacion DDoS
 ├── docker-compose.yml
-├── Dockerfile
-├── requirements.txt
-├── pyproject.toml
+├── docker-compose.cloud.yml
 └── .env.example
 ```
 
 ---
 
-## 🧪 Tests
+## Tests
 
 ```bash
 pip install pytest pytest-asyncio
@@ -781,32 +682,44 @@ pytest tests/ -v
 
 ---
 
-## 📋 Requisitos
+## Requerimientos
 
-| Requisito | Versión | Notas |
-|:----------|:--------|:------|
+| Requerimiento | Version | Notas |
+|:--------------|:--------|:------|
 | Python | 3.11+ | Requerido |
-| PostgreSQL | 15+ | Persistencia de sesiones/memoria |
-| Docker | 20+ | Opcional, para despliegue en contenedores |
-| Clave de API LLM | — | Al menos una: Anthropic, OpenAI o Gemini |
+| PostgreSQL | 15+ | Persistencia de sesion/memoria |
+| Docker | 20+ | Opcional, para deploy containerizado |
+| API Key LLM | -- | Al menos una: Anthropic, OpenAI, o Gemini |
+
+### Para Control de Drone (opcional)
+| Requerimiento | Notas |
+|:--------------|:------|
+| Raspberry Pi 5 | Fuente de 5V 5A requerida para HDMI |
+| Drone DJI Tello | Cualquier Tello o Tello EDU |
+| Tailscale | Tier gratuito, conecta cloud con Raspi |
+
+### Para Herramientas de Seguridad (opcional)
+| Requerimiento | Notas |
+|:--------------|:------|
+| nmap | Escaneo de red (`apt install nmap`) |
+| openssl | Analisis SSL/TLS (generalmente pre-instalado) |
+| curl | Testing web (generalmente pre-instalado) |
 
 ---
 
-## 📜 Licencia
+## Licencia
 
-GPL v3 — Copyright (c) 2026 TokioAI Security Research, Inc. Consultá [LICENSE](LICENSE) para más detalles.
+GPL v3 — Copyright (c) 2026 TokioAI Security Research, Inc. Ver [LICENSE](LICENSE).
 
 ---
 
-## 👤 Autor
+## Autor
 
 Un proyecto de **[TokioAI Security Research, Inc.](https://tokioia.com)**
 
-Construido por **[@daletoniris](https://github.com/daletoniris)** (MrMoz) — Arquitecto de seguridad, hacker, constructor.
+Construido por **[@daletoniris](https://github.com/daletoniris)** (MrMoz) — Arquitecto de seguridad, hacker, investigador de IA, fundador del Village de IA en AI Resilience Hub en [Ekoparty](https://ekoparty.org), profesor en [Hackademy](https://hackademy.io). Desde la Patagonia, Argentina.
 
-TokioAI comenzó como una herramienta personal para automatizar operaciones SOC y gestión de infraestructura. Creció hasta convertirse en un framework completo porque cada vez que algo se rompía a las 3 AM, la respuesta siempre era la misma: "el agente debería encargarse de esto."
-
-Si te resulta útil, dejá una estrella. Si lo rompés, abrí un issue. Si lo mejorás, mandá un PR.
+TokioAI empezo como una herramienta personal para automatizar operaciones SOC y gestion de infraestructura. Crecio hasta ser un framework completo de seguridad ofensiva y defensiva porque cada vez que algo se rompia a las 3 AM, la respuesta era siempre la misma: "el agente deberia manejar esto." Ahora vuela drones, monitorea ataques WiFi, escanea redes y hace cafe — todo desde un mensaje de Telegram.
 
 ---
 
@@ -814,6 +727,6 @@ Si te resulta útil, dejá una estrella. Si lo rompés, abrí un issue. Si lo me
 
 **[TokioAI Security Research, Inc.](https://tokioia.com)**
 
-*IA self-hosted que ejecuta. No es un chatbot — es un agente.*
+*IA self-hosted que ejecuta. No es un chatbot — es un agente que hackea, defiende y vuela.*
 
 </div>
