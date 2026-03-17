@@ -59,9 +59,9 @@ except ImportError:
     sys.exit(1)
 
 # --- Config ---
-API_BASE = os.getenv("TOKIO_DASHBOARD_API", "http://YOUR_WAF_TAILSCALE_IP:8000")
+API_BASE = os.getenv("TOKIO_DASHBOARD_API", "http://localhost:8000")
 API_USER = os.getenv("TOKIO_DASHBOARD_USER", "admin")
-API_PASS = os.getenv("TOKIO_DASHBOARD_PASS", "REDACTED_USE_ENV_VAR")
+API_PASS = os.getenv("TOKIO_DASHBOARD_PASS", "")
 RASPI_IP = os.getenv("TOKIO_RASPI_IP", "YOUR_RASPI_TAILSCALE_IP")
 DRONE_PROXY_URL = os.getenv("DRONE_PROXY_URL", f"http://{RASPI_IP}:5001")
 RASPI_API_URL = os.getenv("RASPI_API_URL", f"http://{RASPI_IP}:5000")

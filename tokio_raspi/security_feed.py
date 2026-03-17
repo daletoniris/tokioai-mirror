@@ -23,9 +23,9 @@ logger = logging.getLogger("tokio.security")
 # Configuration
 # ---------------------------------------------------------------------------
 
-WAF_API_BASE = "http://YOUR_WAF_TAILSCALE_IP:8000"
-WAF_USER = "admin"
-WAF_PASS = "REDACTED_USE_ENV_VAR"
+WAF_API_BASE = os.getenv("TOKIO_WAF_API", "http://localhost:8000")
+WAF_USER = os.getenv("TOKIO_WAF_USER", "admin")
+WAF_PASS = os.getenv("TOKIO_WAF_PASS", "")
 POLL_INTERVAL = 5  # seconds
 
 # Japanese flavor text for different event types

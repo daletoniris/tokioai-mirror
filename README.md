@@ -421,9 +421,9 @@ python3 tokio_soc_v2.py --demo --autonomous
 
 # Custom endpoints
 python3 tokio_soc_v2.py \
-  --api http://YOUR_WAF_TAILSCALE_IP:8000 \
-  --user admin --pass SECRET \
-  --raspi-ip YOUR_RASPI_TAILSCALE_IP \
+  --api http://YOUR_WAF_SERVER:8000 \
+  --user admin --pass YOUR_PASSWORD \
+  --raspi-ip YOUR_RASPI_IP \
   --autonomous
 ```
 
