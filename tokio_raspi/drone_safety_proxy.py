@@ -722,28 +722,49 @@ class DroneSafetyProxy:
             return f"Telemetry error: {e}"
 
     def _take_photo(self, params: dict) -> str:
-        """Take a photo from the drone camera."""
+        """Take a photo from the Tello camera via UDP video stream."""
         if not self._drone:
             return "Drone not connected"
         try:
             import cv2
+            # Start video stream
             self._drone.streamon()
-            frame_read = self._drone.get_frame_read()
-            time.sleep(0.5)
-            frame = frame_read.frame
+            time.sleep(1)
+
+            # Tello streams H264 to UDP 11111
+            cap = cv2.VideoCapture("udp://@0.0.0.0:11111", cv2.CAP_FFMPEG)
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, 2)
+
+            frame = None
+            # Read a few frames to get a stable image
+            for _ in range(15):
+                ret, f = cap.read()
+                if ret:
+                    frame = f
+            cap.release()
+            self._drone.streamoff()
+
+            if frame is None:
+                return "ERROR: Could not capture frame from video stream"
+
             output = params.get("output", f"/tmp/drone_photo_{int(time.time())}.jpg")
             cv2.imwrite(output, frame)
-            self._drone.streamoff()
-            return f"Photo saved: {output}"
+            return f"PHOTO_SAVED:{output}"
         except Exception as e:
+            try:
+                self._drone.streamoff()
+            except Exception:
+                pass
             return f"Photo error: {e}"
 
     def _patrol(self, params: dict) -> str:
-        """Execute a patrol pattern within geofence."""
+        """Execute a patrol pattern within geofence, optionally for a duration."""
         if not self._drone or not self._armed:
             return "Drone must be connected and in flight"
         pattern = params.get("pattern", "square")
         size = min(params.get("size", 100), self.geofence.max_distance_cm // 2)
+        duration_s = params.get("duration", 0)  # 0 = single loop
+        repeats = params.get("repeats", 0)  # 0 = use duration or single
 
         if pattern == "square":
             moves = [("forward", size), ("right", size), ("back", size), ("left", size)]
@@ -754,23 +775,68 @@ class DroneSafetyProxy:
         else:
             return f"Unknown pattern: {pattern}"
 
-        for direction, distance in moves:
-            allowed, reason = self._check_geofence_after_move(direction, distance)
-            if not allowed:
-                return f"Patrol aborted: {reason}"
-            if self._drone:
-                move_map = {
-                    "forward": self._drone.move_forward,
-                    "back": self._drone.move_back,
-                    "left": self._drone.move_left,
-                    "right": self._drone.move_right,
-                }
-                fn = move_map.get(direction)
-                if fn:
-                    fn(distance)
-            self._update_position(direction, distance)
+        # Cap duration at 10 minutes for safety
+        if duration_s > 600:
+            duration_s = 600
 
-        return f"Patrol '{pattern}' ({size}cm) completed"
+        start = time.monotonic()
+        loops_done = 0
+        max_loops = repeats if repeats > 0 else 999
+
+        while True:
+            # Check time limit
+            if duration_s > 0 and (time.monotonic() - start) >= duration_s:
+                break
+            # Check repeat limit
+            if repeats > 0 and loops_done >= max_loops:
+                break
+            # Single loop mode (no duration, no repeats)
+            if duration_s == 0 and repeats == 0 and loops_done >= 1:
+                break
+
+            # Check battery before each loop
+            if self._drone:
+                try:
+                    bat = self._drone.get_battery()
+                    if bat < self.geofence.min_battery_pct:
+                        logger.warning(f"Patrol stopped: battery {bat}%")
+                        self._drone.land()
+                        self._armed = False
+                        return f"Patrol stopped after {loops_done} loops — battery low ({bat}%)"
+                except Exception:
+                    pass
+
+            # Check kill switch
+            if self._kill_switch:
+                return f"Patrol stopped after {loops_done} loops — kill switch activated"
+
+            # Execute one loop
+            for direction, distance in moves:
+                # Recheck time mid-loop
+                if duration_s > 0 and (time.monotonic() - start) >= duration_s:
+                    break
+                if self._kill_switch:
+                    break
+
+                allowed, reason = self._check_geofence_after_move(direction, distance)
+                if not allowed:
+                    return f"Patrol aborted at loop {loops_done + 1}: {reason}"
+                if self._drone:
+                    move_map = {
+                        "forward": self._drone.move_forward,
+                        "back": self._drone.move_back,
+                        "left": self._drone.move_left,
+                        "right": self._drone.move_right,
+                    }
+                    fn = move_map.get(direction)
+                    if fn:
+                        fn(distance)
+                self._update_position(direction, distance)
+
+            loops_done += 1
+
+        elapsed = int(time.monotonic() - start)
+        return f"Patrol '{pattern}' ({size}cm) completed — {loops_done} loops in {elapsed}s"
 
     def _update_position(self, direction: str, distance: int):
         """Track estimated position after movement."""
@@ -1017,6 +1083,21 @@ def create_drone_api(proxy: DroneSafetyProxy):
             })
         except Exception as e:
             return jsonify({"error": str(e)}), 500
+
+    # --- Snapshot endpoint (selfie / photo) ---
+
+    @api.route("/drone/snapshot", methods=["POST"])
+    def drone_snapshot():
+        """Take a photo and return it as JPEG."""
+        from flask import Response, send_file
+        result = proxy.execute("take_photo", {}, request.remote_addr)
+        if result.startswith("PHOTO_SAVED:"):
+            filepath = result.split(":", 1)[1]
+            try:
+                return send_file(filepath, mimetype="image/jpeg")
+            except Exception as e:
+                return jsonify({"error": f"File send error: {e}"}), 500
+        return jsonify({"error": result}), 500
 
     # --- Visual Tracker endpoints ---
 

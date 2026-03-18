@@ -134,16 +134,71 @@ def drone_telemetry(params: Dict[str, Any]) -> str:
     return _send_command("telemetry")
 
 def drone_patrol(params: Dict[str, Any]) -> str:
-    """Patrulla automatica. params: pattern (square/triangle/line), size (cm)."""
+    """
+    Patrulla automatica.
+    params:
+      pattern: square/triangle/line (default: square)
+      size: tamaño en cm (default: 100)
+      duration: duracion en segundos (ej: 180 para 3 minutos). 0 = un solo ciclo.
+      repeats: cantidad de repeticiones. 0 = usar duration o un solo ciclo.
+    """
     pattern = params.get("pattern", "square")
     size = params.get("size", 100)
-    return _send_command("patrol", {"pattern": pattern, "size": size})
+    duration = params.get("duration", 0)
+    repeats = params.get("repeats", 0)
+
+    # Parse duration from minutes if > 0 and < 15 (assume minutes)
+    if 0 < duration <= 15:
+        duration = duration * 60  # convert minutes to seconds
+
+    return _send_command("patrol", {
+        "pattern": pattern,
+        "size": size,
+        "duration": duration,
+        "repeats": repeats,
+    })
 
 def drone_stream_on(params: Dict[str, Any]) -> str:
     return _send_command("stream_on")
 
 def drone_stream_off(params: Dict[str, Any]) -> str:
     return _send_command("stream_off")
+
+def drone_snapshot(params: Dict[str, Any]) -> str:
+    """Tomar una foto/selfie con la camara del drone y devolverla."""
+    import base64
+    import tempfile
+    url = f"{DRONE_PROXY_URL}/drone/snapshot"
+    try:
+        r = requests.post(url, timeout=30)
+        if r.status_code == 200 and r.headers.get("content-type", "").startswith("image/"):
+            # Save to output dir so Telegram bot auto-sends it
+            import os
+            output_dir = "/workspace/output"
+            os.makedirs(output_dir, exist_ok=True)
+            tmp = tempfile.NamedTemporaryFile(
+                suffix=".jpg", prefix="drone_selfie_", delete=False, dir=output_dir
+            )
+            tmp.write(r.content)
+            tmp.close()
+            # Return as base64 + file path so the agent can send it
+            b64 = base64.b64encode(r.content).decode()
+            return json.dumps({
+                "ok": True,
+                "file_path": tmp.name,
+                "size_bytes": len(r.content),
+                "base64_preview": b64[:200] + "...",
+                "message": f"Foto del drone guardada en {tmp.name}. Usa el file_path para enviarla al usuario.",
+            }, ensure_ascii=False, indent=2)
+        else:
+            error = r.json() if r.headers.get("content-type", "").startswith("application/json") else {"error": r.text}
+            return json.dumps({"ok": False, "error": error.get("error", r.text)}, ensure_ascii=False, indent=2)
+    except requests.ConnectionError:
+        return json.dumps({"ok": False, "error": "No se puede conectar al proxy del drone."}, ensure_ascii=False, indent=2)
+    except requests.Timeout:
+        return json.dumps({"ok": False, "error": "Timeout capturando foto (30s)."}, ensure_ascii=False, indent=2)
+    except Exception as e:
+        return json.dumps({"ok": False, "error": f"Error: {e}"}, ensure_ascii=False, indent=2)
 
 def drone_flight_log(params: Dict[str, Any]) -> str:
     """Ver audit log del drone."""
@@ -198,9 +253,9 @@ def drone_control(action: str, params: Optional[Dict[str, Any]] = None) -> str:
     Acciones disponibles:
       Vuelo: connect, takeoff/despegar, land/aterrizar, emergency/emergencia
       Movimiento: move/mover (direction + distance), rotate/rotar (direction + degrees)
-      Patrones: patrol/patrullar (pattern + size)
+      Patrones: patrol/patrullar (pattern + size + duration en minutos para vuelo continuo)
       Telemetria: status/estado, battery/bateria, telemetry/telemetria
-      Camara: stream_on, stream_off
+      Camara: stream_on, stream_off, snapshot/selfie/foto (tomar foto y enviarla)
       Seguridad: flight_log, geofence, kill_reset
       WiFi: wifi_connect/conectar_wifi, wifi_disconnect/desconectar_wifi, wifi_status
 
@@ -232,6 +287,11 @@ def drone_control(action: str, params: Optional[Dict[str, Any]] = None) -> str:
         # Camera
         "stream_on": drone_stream_on,
         "stream_off": drone_stream_off,
+        "snapshot": drone_snapshot,
+        "selfie": drone_snapshot,
+        "foto": drone_snapshot,
+        "photo": drone_snapshot,
+        "take_photo": drone_snapshot,
         # Telemetry
         "status": drone_status,
         "estado": drone_status,

@@ -540,34 +540,37 @@ def load_builtin_tools(registry: ToolRegistry) -> int:
 
     # ── Drone Tools (via Safety Proxy on Raspi) ──────────────────────────
     try:
-        from .drone_proxy_tools import drone_control
+        from .drone_secure_tools import drone_secure
 
         registry.register(
             name="drone",
             description=(
-                "Control de drone DJI Tello via Safety Proxy en Raspberry Pi. "
-                "WiFi: wifi_connect/conectar_drone, wifi_disconnect/desconectar_drone, wifi_status. "
-                "Vuelo: connect, takeoff/despegar, land/aterrizar, emergency/emergencia. "
-                "Movimiento: move/mover (direction+distance), rotate/rotar (direction+degrees). "
-                "Patrones: patrol/patrullar (pattern+size). "
-                "Telemetria: status/estado, battery/bateria, telemetry/telemetria. "
-                "Seguridad: flight_log, geofence, kill_reset. "
-                "IMPORTANTE: Antes de volar ejecutar wifi_connect."
+                "Control SEGURO de drone DJI Tello via Safety Proxy en Raspberry Pi. "
+                "IMPORTANTE: Antes de volar ejecutar wifi_connect para conectar al drone. "
+                "Acciones: wifi_connect (conectar WiFi drone), wifi_disconnect, wifi_status, "
+                "connect, takeoff/despegar, land/aterrizar, move/mover, rotate/rotar, "
+                "patrol/patrullar (pattern+size+duration en min), "
+                "snapshot/selfie/foto (tomar foto con camara del drone), "
+                "stream_on, stream_off, battery/bateria, telemetry/telemetria, status/estado, "
+                "kill (emergency stop), kill_reset, audit (security log), geofence (limits). "
+                "Todos los comandos pasan por el proxy con geofencing y auto-land."
             ),
             category="IoT",
             parameters={
-                "action": "Accion del drone",
-                "params": "Parametros especificos de la accion",
+                "action": "Accion: wifi_connect, connect, takeoff, land, move, rotate, patrol, snapshot, kill, audit, geofence, etc",
+                "params": "direction, distance, degrees, pattern, size, duration, speed",
             },
-            executor=drone_control,
+            executor=drone_secure,
             examples=[
                 'TOOL:drone({"action": "wifi_connect"})',
                 'TOOL:drone({"action": "status"})',
+                'TOOL:drone({"action": "connect"})',
                 'TOOL:drone({"action": "takeoff"})',
                 'TOOL:drone({"action": "move", "params": {"direction": "forward", "distance": 100}})',
-                'TOOL:drone({"action": "rotate", "params": {"direction": "clockwise", "degrees": 90}})',
-                'TOOL:drone({"action": "patrol", "params": {"pattern": "square", "size": 150}})',
+                'TOOL:drone({"action": "patrol", "params": {"pattern": "square", "size": 150, "duration": 3}})',
+                'TOOL:drone({"action": "snapshot"})',
                 'TOOL:drone({"action": "land"})',
+                'TOOL:drone({"action": "kill"})',
                 'TOOL:drone({"action": "wifi_disconnect"})',
             ],
         )
