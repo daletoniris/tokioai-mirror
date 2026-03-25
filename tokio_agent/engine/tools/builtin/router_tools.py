@@ -15,7 +15,11 @@ from typing import Any, Dict, Optional
 _ACTIONS = (
     "health", "firewall_status", "wifi_status", "detect_attack_signals",
     "wifi_defense_status", "wifi_defense_harden", "recover_wifi",
-    "add_block_ip", "remove_block_ip", "run",
+    "add_block_ip", "remove_block_ip",
+    "block_mac", "unblock_mac", "list_blocked_macs",
+    "change_wifi_channel", "get_wifi_channel",
+    "rotate_wifi_password",
+    "run",
 )
 
 
@@ -55,6 +59,10 @@ def _run(cfg: Dict, remote: str, timeout: Optional[int] = None) -> str:
 
 def _validate_ip(ip: str) -> bool:
     return bool(re.match(r"^\d{1,3}(\.\d{1,3}){3}$", ip or ""))
+
+
+def _validate_mac(mac: str) -> bool:
+    return bool(re.match(r"^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$", mac or ""))
 
 
 def _count(text: str, pattern: str) -> int:
@@ -148,6 +156,81 @@ def router_control(action: str, params: Optional[Dict[str, Any]] = None) -> str:
                 "uci delete $i; done; uci commit firewall; /etc/init.d/firewall reload",
                 timeout=max(60, cfg["cmd_timeout"]),
             )
+
+        # ── WiFi Defense: MAC blocking ──
+
+        elif action == "block_mac":
+            mac = str(params.get("mac", "")).strip().upper()
+            if not _validate_mac(mac):
+                raise ValueError(f"MAC invalida: {mac}")
+            mac_esc = shlex.quote(mac)
+            # Add MAC to macfilter deny list on the WiFi interface
+            result = _run(cfg,
+                f"uci set wireless.@wifi-iface[0].macfilter='deny'; "
+                f"uci add_list wireless.@wifi-iface[0].maclist={mac_esc}; "
+                f"uci commit wireless; wifi reload",
+                timeout=max(60, cfg["cmd_timeout"]),
+            )
+            result = {"blocked": mac, "output": result}
+
+        elif action == "unblock_mac":
+            mac = str(params.get("mac", "")).strip().upper()
+            if not _validate_mac(mac):
+                raise ValueError(f"MAC invalida: {mac}")
+            mac_esc = shlex.quote(mac)
+            result = _run(cfg,
+                f"uci del_list wireless.@wifi-iface[0].maclist={mac_esc}; "
+                f"uci commit wireless; wifi reload",
+                timeout=max(60, cfg["cmd_timeout"]),
+            )
+            result = {"unblocked": mac, "output": result}
+
+        elif action == "list_blocked_macs":
+            raw = _run(cfg,
+                "uci get wireless.@wifi-iface[0].maclist 2>/dev/null || echo 'none'",
+            )
+            result = {"macfilter_mode": _run(cfg, "uci get wireless.@wifi-iface[0].macfilter 2>/dev/null || echo 'disabled'"),
+                       "blocked_macs": raw}
+
+        # ── WiFi Defense: Channel control ──
+
+        elif action == "get_wifi_channel":
+            result = {
+                "channel": _run(cfg, "uci get wireless.radio0.channel 2>/dev/null || echo '?'"),
+                "htmode": _run(cfg, "uci get wireless.radio0.htmode 2>/dev/null || echo '?'"),
+            }
+
+        elif action == "change_wifi_channel":
+            channel = str(params.get("channel", "")).strip()
+            valid_24ghz = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "auto"}
+            if channel not in valid_24ghz:
+                raise ValueError(f"Canal invalido: {channel}. Validos: {valid_24ghz}")
+            ch_esc = shlex.quote(channel)
+            result = _run(cfg,
+                f"uci set wireless.radio0.channel={ch_esc}; "
+                f"uci commit wireless; wifi reload",
+                timeout=max(60, cfg["cmd_timeout"]),
+            )
+            result = {"new_channel": channel, "output": result}
+
+        # ── WiFi Defense: Password rotation ──
+
+        elif action == "rotate_wifi_password":
+            import secrets as _sec
+            new_pass = params.get("password", "")
+            if not new_pass:
+                # Generate a strong random password
+                new_pass = _sec.token_urlsafe(16)
+            if len(new_pass) < 8:
+                raise ValueError("Password must be at least 8 characters")
+            pass_esc = shlex.quote(new_pass)
+            result = _run(cfg,
+                f"uci set wireless.@wifi-iface[0].key={pass_esc}; "
+                f"uci commit wireless; wifi reload",
+                timeout=max(60, cfg["cmd_timeout"]),
+            )
+            result = {"password_changed": True, "new_password": new_pass,
+                       "note": "All devices will need to reconnect with the new password"}
 
         elif action == "run":
             cmd = str(params.get("command", "")).strip()

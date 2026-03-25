@@ -547,18 +547,24 @@ def load_builtin_tools(registry: ToolRegistry) -> int:
             description=(
                 "Control SEGURO de drone DJI Tello via Safety Proxy en Raspberry Pi. "
                 "IMPORTANTE: Antes de volar ejecutar wifi_connect para conectar al drone. "
-                "Acciones: wifi_connect (conectar WiFi drone), wifi_disconnect, wifi_status, "
+                "Acciones basicas: wifi_connect, wifi_disconnect, wifi_status, "
                 "connect, takeoff/despegar, land/aterrizar, move/mover, rotate/rotar, "
-                "patrol/patrullar (pattern+size+duration en min), "
-                "snapshot/selfie/foto (tomar foto con camara del drone), "
-                "stream_on, stream_off, battery/bateria, telemetry/telemetria, status/estado, "
-                "kill (emergency stop), kill_reset, audit (security log), geofence (limits). "
-                "Todos los comandos pasan por el proxy con geofencing y auto-land."
+                "patrol/patrullar, snapshot/selfie/foto, stream_on, stream_off, "
+                "battery/bateria, telemetry/telemetria, status/estado, "
+                "kill (emergency stop), kill_reset, audit, geofence. "
+                "VISION (visual servoing desde camara de Tokio): "
+                "vision_register, vision_status, come_to_me, hover, dance, patrol, vision_idle. "
+                "FPV (ojo volador — drone sigue personas con su propia camara 720p): "
+                "fpv_start/ojo_volador (activa FPV + follow), fpv_stop (desactiva), "
+                "fpv_status/fpv (estado del FPV: personas, target, obstaculos), "
+                "fpv_mode (follow/explore/hover/idle), fpv_snapshot/fpv_foto (foto desde drone). "
+                "FPV se activa automaticamente al despegar. El drone sigue personas, "
+                "evita obstaculos, y Tokio narra lo que ve su ojo volador."
             ),
             category="IoT",
             parameters={
-                "action": "Accion: wifi_connect, connect, takeoff, land, move, rotate, patrol, snapshot, kill, audit, geofence, etc",
-                "params": "direction, distance, degrees, pattern, size, duration, speed",
+                "action": "Accion: wifi_connect, connect, takeoff, land, move, rotate, patrol, snapshot, kill, audit, geofence, vision_register, vision_status, come_to_me, hover, dance, vision_idle, fpv_start, fpv_stop, fpv_status, fpv_mode, fpv_snapshot, etc",
+                "params": "direction, distance, degrees, pattern, size, duration, speed, mode (para vision_mode/fpv_mode)",
             },
             executor=drone_secure,
             examples=[
@@ -572,6 +578,14 @@ def load_builtin_tools(registry: ToolRegistry) -> int:
                 'TOOL:drone({"action": "land"})',
                 'TOOL:drone({"action": "kill"})',
                 'TOOL:drone({"action": "wifi_disconnect"})',
+                'TOOL:drone({"action": "vision_register"})',
+                'TOOL:drone({"action": "vision_status"})',
+                'TOOL:drone({"action": "come_to_me"})',
+                'TOOL:drone({"action": "hover"})',
+                'TOOL:drone({"action": "dance"})',
+                'TOOL:drone({"action": "fpv_start"})',
+                'TOOL:drone({"action": "fpv_status"})',
+                'TOOL:drone({"action": "fpv_snapshot"})',
             ],
         )
         count += 1
@@ -617,25 +631,34 @@ def load_builtin_tools(registry: ToolRegistry) -> int:
         registry.register(
             name="raspi_vision",
             description=(
-                "Control del sistema de vision Raspberry Pi con Hailo-8L AI: "
-                "status, look (ver que detecta la camara), emotion (cambiar cara de Tokio), "
-                "model (cambiar modelo: detect/faces/pose), guard (modo guardia autonomo), "
-                "look_at (mover ojos), log (eventos recientes)"
+                "Control del sistema Raspberry Pi: vision con Hailo-8L AI, monitor de salud BLE, Home Assistant, WiFi defense. "
+                "Vision: see (que ve Tokio), status (estado), snapshot (foto), thoughts (pensamientos IA), "
+                "say (mensaje en pantalla), teach (registrar cara), faces (caras conocidas), emotion, model, look_at. "
+                "Salud: health (reporte COMPLETO de salud del usuario: HR, presion, SpO2, historial, promedios, evaluacion), "
+                "health_status (datos actuales del smartwatch). "
+                "Casa: ha_status (Home Assistant). WiFi: wifi (defensa WiFi). "
+                "AI Brain: ai_status, ai_memory, ai_correct (corregir algo que dice mal), "
+                "ai_teach (ensenar un hecho), ai_forget (olvidar observacion erronea), ai_person, ai_environment. "
+                "IMPORTANTE: Cuando el usuario pide CORREGIR algo, usar ai_correct, NO repetir see/look."
             ),
             category="IoT",
             parameters={
-                "action": "Accion: status, look, emotion, model, guard, look_at, log",
-                "params": "emotion, message, model, x, y",
+                "action": "Accion: see, status, snapshot, thoughts, say, teach, faces, emotion, model, look_at, health, health_status, ha_status, wifi, ai_status, ai_memory, ai_correct, ai_teach, ai_forget, ai_person, ai_environment",
+                "params": "Parametros segun accion: text, color, name, role, emotion, message, model, x, y, correction, key, value, fact, notes",
             },
             executor=raspi_vision,
             examples=[
+                'TOOL:raspi_vision({"action": "see"})',
+                'TOOL:raspi_vision({"action": "health"})',
                 'TOOL:raspi_vision({"action": "status"})',
-                'TOOL:raspi_vision({"action": "look"})',
-                'TOOL:raspi_vision({"action": "emotion", "params": {"emotion": "alert", "message": "Intruso detectado!"}})',
-                'TOOL:raspi_vision({"action": "model", "params": {"model": "faces"}})',
-                'TOOL:raspi_vision({"action": "guard"})',
-                'TOOL:raspi_vision({"action": "look_at", "params": {"x": 0.5, "y": -0.3}})',
-                'TOOL:raspi_vision({"action": "log"})',
+                'TOOL:raspi_vision({"action": "thoughts"})',
+                'TOOL:raspi_vision({"action": "say", "params": {"text": "Hola desde Telegram!"}})',
+                'TOOL:raspi_vision({"action": "teach", "params": {"name": "Sofi", "role": "friend"}})',
+                'TOOL:raspi_vision({"action": "ai_correct", "params": {"correction": "El cartel dice NIPERIA, no Nigeria"}})',
+                'TOOL:raspi_vision({"action": "ai_teach", "params": {"key": "cartel_pared", "value": "NIPERIA Lab"}})',
+                'TOOL:raspi_vision({"action": "ai_forget", "params": {"key": "observacion_incorrecta"}})',
+                'TOOL:raspi_vision({"action": "snapshot"})',
+                'TOOL:raspi_vision({"action": "wifi"})',
             ],
         )
         count += 1

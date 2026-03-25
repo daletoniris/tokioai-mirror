@@ -103,93 +103,179 @@ async def _exec(cmd: str, timeout: int = 120) -> str:
 
 # ── WAF Management ────────────────────────────────────────────────────────
 
+_waf_dashboard_token = ""
+_waf_dashboard_token_exp = 0
+
+
+async def _waf_dashboard_request(endpoint: str, method: str = "GET",
+                                  body: dict = None) -> dict:
+    """Make authenticated request to WAF Dashboard API (same Docker network)."""
+    global _waf_dashboard_token, _waf_dashboard_token_exp
+    import time as _time
+
+    base_url = os.getenv("WAF_DASHBOARD_URL", "http://tokio-gcp-dashboard-api:8000")
+    password = os.getenv("DASHBOARD_PASSWORD", os.getenv("TOKIO_WAF_PASS", ""))
+
+    # Auto-login if token expired
+    if not _waf_dashboard_token or _time.time() > _waf_dashboard_token_exp - 60:
+        login_cmd = (
+            f"curl -sf '{base_url}/api/auth/login' "
+            f"-H 'Content-Type: application/json' "
+            f"-d '{{\"username\":\"admin\",\"password\":\"{password}\"}}'"
+        )
+        result = await _exec_direct(login_cmd, timeout=10)
+        try:
+            data = json.loads(result)
+            _waf_dashboard_token = data.get("token", "")
+            _waf_dashboard_token_exp = _time.time() + data.get("expires_in", 3600)
+        except (json.JSONDecodeError, KeyError):
+            return {"error": f"WAF login failed: {result}"}
+
+    # Make the actual request
+    headers = f"-H 'Authorization: Bearer {_waf_dashboard_token}'"
+    if method == "GET":
+        cmd = f"curl -sf '{base_url}{endpoint}' {headers}"
+    elif method == "POST":
+        body_str = json.dumps(body or {})
+        cmd = f"curl -sf -X POST '{base_url}{endpoint}' {headers} -H 'Content-Type: application/json' -d '{body_str}'"
+    elif method == "DELETE":
+        cmd = f"curl -sf -X DELETE '{base_url}{endpoint}' {headers}"
+    else:
+        return {"error": f"Unsupported method: {method}"}
+
+    result = await _exec_direct(cmd, timeout=15)
+    try:
+        return json.loads(result)
+    except json.JSONDecodeError:
+        return {"raw": result}
+
+
 async def gcp_waf(action: str, params: Optional[Dict] = None) -> str:
     """
-    GCP WAF management (ModSecurity + Nginx).
+    GCP WAF management — queries Dashboard API directly (same Docker network).
 
     Actions:
-      - status: WAF status (nginx, modsecurity, blocked IPs)
-      - blocked_ips: List blocked IPs
+      - status: WAF summary (attacks, blocked, IPs, severity breakdown)
+      - health: Full health check (dashboard + containers)
+      - recent: Recent attacks (params: limit)
+      - top_ips: Top attacker IPs (params: hours)
+      - blocked_ips: List actively blocked IPs
       - block_ip: Block an IP (params: ip)
       - unblock_ip: Unblock an IP (params: ip)
-      - rules: List ModSecurity rules
-      - logs: Recent WAF logs (params: lines)
-      - reload: Reload Nginx
-      - audit_log: Get modsec audit log
-      - health: Full health check
+      - timeline: Attack timeline (params: hours)
+      - owasp: OWASP category breakdown
+      - episodes: Active attack episodes
+      - audit: Audit log entries (params: limit)
     """
     params = params or {}
-    config = _get_gcp_config()
-    instance = config.get("instance_name", "")
-    zone = config.get("zone", "us-central1-a")
-    project = config.get("project_id", "")
 
-    if not instance or not project:
+    if action == "status":
+        data = await _waf_dashboard_request("/api/summary")
+        if "error" in data:
+            return json.dumps(data, ensure_ascii=False)
         return json.dumps({
-            "ok": False,
-            "error": "GCP_INSTANCE_NAME y GCP_PROJECT_ID requeridos. Configúralos en .env.",
+            "ok": True,
+            "total_attacks": data.get("total", 0),
+            "blocked": data.get("blocked", 0),
+            "unique_ips": data.get("unique_ips", 0),
+            "critical": data.get("critical", 0),
+            "high": data.get("high", 0),
+            "medium": data.get("medium", 0),
+            "low": data.get("low", 0),
+            "active_episodes": data.get("active_episodes", 0),
+            "active_blocks": data.get("active_blocks", 0),
         }, ensure_ascii=False)
 
-    # SSH directo (sin IAP tunnel — requiere puerto 22 abierto y OS Login configurado)
-    base = f"gcloud compute ssh {instance} --zone={zone} --project={project} --command="
-
-    cmd_map = {
-        "status": (
-            "echo '=== Nginx ===' && "
-            "docker exec modsecurity-nginx nginx -t 2>&1 && "
-            "echo '=== Containers ===' && "
-            "docker ps --format '{{.Names}} {{.Status}}' && "
-            "echo '=== Blocked IPs ===' && "
-            "docker exec modsecurity-nginx cat /etc/nginx/blocked_ips.conf 2>/dev/null | wc -l"
-        ),
-        "blocked_ips": (
-            "docker exec modsecurity-nginx cat /etc/nginx/blocked_ips.conf 2>/dev/null || "
-            "echo 'No blocked IPs file'"
-        ),
-        "block_ip": (
-            f"docker exec modsecurity-nginx sh -c "
-            f"\"echo 'deny {params.get('ip', '')}; ' >> /etc/nginx/blocked_ips.conf && "
-            f"nginx -s reload\" 2>&1"
-        ),
-        "unblock_ip": (
-            f"docker exec modsecurity-nginx sh -c "
-            f"\"sed -i '/{params.get('ip', '')}/d' /etc/nginx/blocked_ips.conf && "
-            f"nginx -s reload\" 2>&1"
-        ),
-        "rules": (
-            "docker exec modsecurity-nginx ls /etc/modsecurity.d/owasp-crs/rules/ 2>/dev/null || "
-            "echo 'No rules directory'"
-        ),
-        "logs": (
-            f"docker exec modsecurity-nginx tail -n {params.get('lines', 50)} "
-            f"/var/log/modsecurity/modsec_audit.log 2>/dev/null || "
-            f"echo 'No audit log'"
-        ),
-        "reload": "docker exec modsecurity-nginx nginx -s reload 2>&1",
-        "audit_log": (
-            f"docker exec modsecurity-nginx tail -n {params.get('lines', 200)} "
-            f"/var/log/modsecurity/modsec_audit.log 2>/dev/null"
-        ),
-        "health": (
-            "echo '=== Docker ===' && docker ps --format '{{.Names}}: {{.Status}}' && "
-            "echo '=== Nginx Test ===' && docker exec modsecurity-nginx nginx -t 2>&1 && "
-            "echo '=== Disk ===' && df -h / && "
-            "echo '=== Memory ===' && free -h && "
-            "echo '=== Logs (last 10) ===' && "
-            "docker exec modsecurity-nginx tail -n 10 /var/log/modsecurity/modsec_audit.log 2>/dev/null || true"
-        ),
-    }
-
-    remote = cmd_map.get(action)
-    if not remote:
+    elif action == "health":
+        health = await _waf_dashboard_request("/health")
+        # Also check containers via Docker socket API
+        containers_cmd = (
+            "curl -sf --unix-socket /var/run/docker.sock "
+            "'http://localhost/containers/json?filters={\"name\":[\"tokio-gcp\"]}' "
+            "2>/dev/null | python3 -c \"import sys,json; "
+            "[print(f\\\"{c['Names'][0][1:]}: {c['State']} ({c['Status']})\\\") "
+            "for c in json.load(sys.stdin)]\" 2>/dev/null || echo 'Docker API not available'"
+        )
+        containers = await _exec_direct(containers_cmd, timeout=10)
         return json.dumps({
-            "ok": False,
-            "error": f"Acción WAF no soportada: '{action}'",
-            "supported": list(cmd_map.keys()),
+            "ok": True,
+            "dashboard": health,
+            "containers": containers,
         }, ensure_ascii=False)
 
-    result = await _exec(f'{base}"{remote}"', timeout=60)
-    return result
+    elif action == "recent":
+        limit = params.get("limit", 20)
+        data = await _waf_dashboard_request(f"/api/attacks/recent?limit={limit}")
+        if isinstance(data, list):
+            return json.dumps({"ok": True, "count": len(data), "attacks": data[:20]}, ensure_ascii=False)
+        return json.dumps(data, ensure_ascii=False)
+
+    elif action == "top_ips":
+        hours = params.get("hours", 24)
+        data = await _waf_dashboard_request(f"/api/top_ips?hours={hours}")
+        return json.dumps({"ok": True, "data": data}, ensure_ascii=False)
+
+    elif action == "blocked_ips":
+        data = await _waf_dashboard_request("/api/blocked")
+        return json.dumps({"ok": True, "data": data}, ensure_ascii=False)
+
+    elif action == "block_ip":
+        ip = params.get("ip", "")
+        if not ip:
+            return json.dumps({"ok": False, "error": "ip parameter required"})
+        data = await _waf_dashboard_request("/api/blocked", method="POST",
+                                             body={"ip": ip, "reason": params.get("reason", "Blocked by TokioAI")})
+        return json.dumps({"ok": True, "data": data}, ensure_ascii=False)
+
+    elif action == "unblock_ip":
+        ip = params.get("ip", "")
+        if not ip:
+            return json.dumps({"ok": False, "error": "ip parameter required"})
+        data = await _waf_dashboard_request(f"/api/blocked/{ip}", method="DELETE")
+        return json.dumps({"ok": True, "data": data}, ensure_ascii=False)
+
+    elif action == "timeline":
+        data = await _waf_dashboard_request("/api/timeline")
+        return json.dumps({"ok": True, "data": data}, ensure_ascii=False)
+
+    elif action == "owasp":
+        data = await _waf_dashboard_request("/api/owasp_breakdown")
+        return json.dumps({"ok": True, "data": data}, ensure_ascii=False)
+
+    elif action == "episodes":
+        data = await _waf_dashboard_request("/api/episodes")
+        return json.dumps({"ok": True, "data": data}, ensure_ascii=False)
+
+    elif action == "audit":
+        limit = params.get("limit", 20)
+        data = await _waf_dashboard_request(f"/api/audit?limit={limit}")
+        return json.dumps({"ok": True, "data": data}, ensure_ascii=False)
+
+    else:
+        return json.dumps({
+            "ok": False,
+            "error": f"Accion WAF no soportada: '{action}'",
+            "supported": ["status", "health", "recent", "top_ips", "blocked_ips",
+                          "block_ip", "unblock_ip", "timeline", "owasp", "episodes", "audit"],
+        }, ensure_ascii=False)
+
+
+async def _exec_direct(cmd: str, timeout: int = 30) -> str:
+    """Execute a command directly (no gcloud SSH, no SA activation needed)."""
+    try:
+        proc = await asyncio.create_subprocess_shell(
+            cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+        out = stdout.decode("utf-8", errors="replace").strip()
+        err = stderr.decode("utf-8", errors="replace").strip()
+        if proc.returncode != 0:
+            return f"Error (exit {proc.returncode}):\n{err}\n{out}".strip()
+        return out or "OK"
+    except asyncio.TimeoutError:
+        return f"Timeout ({timeout}s)"
+    except Exception as e:
+        return f"Error: {type(e).__name__}: {e}"
 
 
 # ── GCP Compute ───────────────────────────────────────────────────────────

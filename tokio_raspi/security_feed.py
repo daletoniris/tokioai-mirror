@@ -8,6 +8,7 @@ security events for the UI terminal.
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import time
 import random
@@ -23,9 +24,9 @@ logger = logging.getLogger("tokio.security")
 # Configuration
 # ---------------------------------------------------------------------------
 
-WAF_API_BASE = os.getenv("TOKIO_WAF_API", "http://localhost:8000")
+WAF_API_BASE = os.getenv("TOKIO_WAF_API", "http://127.0.0.1:18000")
 WAF_USER = os.getenv("TOKIO_WAF_USER", "admin")
-WAF_PASS = os.getenv("TOKIO_WAF_PASS", "")
+WAF_PASS = os.getenv("TOKIO_WAF_PASS", os.getenv("WAF_ADMIN_PASS", ""))
 POLL_INTERVAL = 5  # seconds
 
 # Japanese flavor text for different event types
@@ -157,6 +158,8 @@ class SecurityFeed:
         self._new_events_count = 0
         self._connected = False
         self._error_msg = ""
+        self._auth_failures = 0
+        self._auth_backoff = 0.0
 
         # Emotion callback
         self._emotion_callback = None
@@ -174,7 +177,7 @@ class SecurityFeed:
         self._running = True
         self._thread = threading.Thread(target=self._poll_loop, daemon=True)
         self._thread.start()
-        logger.info("Security feed started")
+        print(f"[SecurityFeed] Started (WAF: {WAF_API_BASE}, user: {WAF_USER}, pass: {'***' if WAF_PASS else 'MISSING!'})")
 
     def stop(self):
         self._running = False
@@ -202,6 +205,10 @@ class SecurityFeed:
     def _get_token(self) -> Optional[str]:
         if self._token and time.time() < self._token_expiry - 300:
             return self._token
+        # Exponential backoff on auth failures
+        now = time.time()
+        if now < self._auth_backoff:
+            return None
         try:
             r = requests.post(
                 f"{WAF_API_BASE}/api/auth/login",
@@ -212,9 +219,17 @@ class SecurityFeed:
             data = r.json()
             self._token = data["token"]
             self._token_expiry = time.time() + 86000
+            self._auth_failures = 0
+            self._connected = True
+            print("[SecurityFeed] WAF authenticated OK")
             return self._token
         except Exception as e:
-            logger.error(f"Auth failed: {e}")
+            self._auth_failures += 1
+            # Backoff: 10s, 30s, 60s, 120s, max 300s
+            backoff = min(300, 10 * (2 ** min(self._auth_failures, 5)))
+            self._auth_backoff = now + backoff
+            if self._auth_failures <= 3:
+                print(f"[SecurityFeed] Auth failed: {e} (retry in {backoff}s)")
             self._error_msg = f"Auth: {e}"
             return None
 

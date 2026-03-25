@@ -21,6 +21,8 @@ from .memory.workspace import Workspace
 from .memory.session import SessionManager
 from .context_builder import build_system_prompt
 from .error_learner import ErrorLearner
+from .entity_sync import sync_after_response, notify_incoming_message, on_security_event
+from .self_healing import SelfHealingEngine
 from .security.prompt_guard import PromptGuard
 from .security.input_sanitizer import sanitize_command, sanitize_sql
 from .watchdog import get_watchdog
@@ -76,6 +78,11 @@ class TokioAgent:
         # Watchdog
         self.watchdog = get_watchdog()
 
+        # Self-healing engine
+        self.self_healing = SelfHealingEngine(
+            on_event=lambda t, m, s: asyncio.ensure_future(on_security_event(t, m, s))
+        )
+
         # Stats
         self._stats = {
             "messages_processed": 0,
@@ -91,8 +98,9 @@ class TokioAgent:
         )
 
     def start_background_tasks(self):
-        """Start background tasks (watchdog, etc.). Call once after event loop is running."""
+        """Start background tasks (watchdog, self-healing, etc.). Call once after event loop is running."""
         self.watchdog.start()
+        self.self_healing.start()
 
     async def process_message(
         self,
@@ -112,6 +120,9 @@ class TokioAgent:
         """
         start_time = time.monotonic()
         self._stats["messages_processed"] += 1
+
+        # ── ENTITY: Show thinking face while processing ──
+        asyncio.ensure_future(notify_incoming_message(session_id or ""))
 
         # ── SECURITY: Prompt Guard ──
         guard_result = self.prompt_guard.check(user_message)
@@ -234,6 +245,13 @@ class TokioAgent:
 
         # Check if user shared their name (per-user isolated)
         self._detect_user_info(user_message, session_id)
+
+        # ── ENTITY: Sync emotion + display after response ──
+        asyncio.ensure_future(sync_after_response(
+            user_message=user_message,
+            response=clean_response,
+            session_id=session_id or "",
+        ))
 
         return clean_response
 

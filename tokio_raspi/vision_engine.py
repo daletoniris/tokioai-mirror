@@ -139,6 +139,11 @@ class VisionEngine:
         self._lock = threading.Lock()
         self._thread: Optional[threading.Thread] = None
 
+        # External frame inbox/outbox for FPV detection
+        self._ext_frame: Optional[np.ndarray] = None
+        self._ext_detections: Optional[list[Detection]] = None
+        self._ext_lock = threading.Lock()
+
         self._init_camera()
         self._init_hailo()
 
@@ -294,6 +299,7 @@ class VisionEngine:
         from hailo_platform import InferVStreams
 
         frame_times = []
+        ext_counter = 0
 
         with InferVStreams(self._network_group,
                           self._input_params,
@@ -336,6 +342,31 @@ class VisionEngine:
                         self._detections = detections
                         self._fps = fps
 
+                    # Process external FPV frame every 3rd cycle (~10fps)
+                    ext_counter += 1
+                    if ext_counter >= 3:
+                        ext_counter = 0
+                        ext_frame = None
+                        with self._ext_lock:
+                            if self._ext_frame is not None:
+                                ext_frame = self._ext_frame
+                                self._ext_frame = None
+                        if ext_frame is not None:
+                            try:
+                                eh, ew = ext_frame.shape[:2]
+                                ext_input = self._preprocess(ext_frame)
+                                ext_results = pipeline.infer({self._input_name: ext_input})
+                                ext_dets = _hailo_nms_postprocess(
+                                    ext_results,
+                                    orig_h=eh, orig_w=ew,
+                                    conf_thresh=self.conf_thresh,
+                                    num_classes=self._num_classes,
+                                )
+                                with self._ext_lock:
+                                    self._ext_detections = ext_dets
+                            except Exception as e:
+                                print(f"[VisionEngine] FPV inference error: {e}")
+
     def start(self):
         """Start capture + inference thread."""
         if self._running:
@@ -366,6 +397,18 @@ class VisionEngine:
         """Get current FPS."""
         with self._lock:
             return self._fps
+
+    def detect_external(self, frame: np.ndarray) -> Optional[list[Detection]]:
+        """Submit an external frame for Hailo detection (non-blocking).
+
+        Returns previous results or None if not yet processed.
+        Call this repeatedly — results come back on next cycle.
+        """
+        with self._ext_lock:
+            self._ext_frame = frame.copy()
+            result = self._ext_detections
+            self._ext_detections = None
+            return result
 
     def get_status(self) -> dict:
         """Get engine status for API/UI."""

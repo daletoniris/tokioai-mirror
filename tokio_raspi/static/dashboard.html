@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TokioAI Dashboard</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #0a0e17;
+  color: #e0e8ff;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  min-height: 100vh;
+}
+.header {
+  background: linear-gradient(135deg, #0d1320, #1a1040);
+  border-bottom: 1px solid #2a3050;
+  padding: 16px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.header h1 {
+  font-size: 1.4em;
+  color: #00e5ff;
+  font-weight: 600;
+}
+.header .status-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: #00ff88;
+  display: inline-block;
+  margin-right: 8px;
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 16px;
+  padding: 16px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+.card {
+  background: #111827;
+  border: 1px solid #1e293b;
+  border-radius: 12px;
+  padding: 20px;
+  transition: border-color 0.3s;
+}
+.card:hover { border-color: #00e5ff44; }
+.card h2 {
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #64748b;
+  margin-bottom: 12px;
+}
+.card .value {
+  font-size: 2em;
+  font-weight: 700;
+  color: #00e5ff;
+}
+.card .sub { color: #94a3b8; font-size: 0.9em; margin-top: 4px; }
+.snapshot-img {
+  width: 100%;
+  border-radius: 8px;
+  background: #000;
+  min-height: 200px;
+}
+.thought-bubble {
+  background: #1e293b;
+  border-left: 3px solid #00e5ff;
+  padding: 12px 16px;
+  border-radius: 0 8px 8px 0;
+  margin-bottom: 8px;
+  font-style: italic;
+  color: #cbd5e1;
+}
+.thought-bubble .meta {
+  font-size: 0.75em;
+  color: #475569;
+  margin-top: 4px;
+  font-style: normal;
+}
+.det-list { list-style: none; }
+.det-list li {
+  padding: 6px 0;
+  border-bottom: 1px solid #1e293b;
+  display: flex;
+  justify-content: space-between;
+}
+.det-list .label { color: #e2e8f0; }
+.det-list .conf { color: #00e5ff; font-weight: 600; }
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.btn {
+  padding: 8px 16px;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  background: #1e293b;
+  color: #e2e8f0;
+  cursor: pointer;
+  font-size: 0.85em;
+  transition: all 0.2s;
+}
+.btn:hover { background: #00e5ff22; border-color: #00e5ff; color: #00e5ff; }
+.btn.active { background: #00e5ff33; border-color: #00e5ff; color: #00e5ff; }
+.btn.danger { border-color: #ef4444; color: #ef4444; }
+.btn.danger:hover { background: #ef444422; }
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.metric {
+  text-align: center;
+  padding: 8px;
+  background: #0f172a;
+  border-radius: 8px;
+}
+.metric .num { font-size: 1.4em; font-weight: 700; color: #00e5ff; }
+.metric .lbl { font-size: 0.7em; color: #64748b; text-transform: uppercase; }
+.wifi-alert {
+  background: #7f1d1d;
+  border: 1px solid #ef4444;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-top: 8px;
+  color: #fca5a5;
+  font-size: 0.9em;
+}
+#toast {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: #1e293b;
+  border: 1px solid #00e5ff;
+  color: #00e5ff;
+  padding: 12px 20px;
+  border-radius: 8px;
+  display: none;
+  z-index: 999;
+  font-size: 0.9em;
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div><span class="status-dot" id="statusDot"></span><h1 style="display:inline">TokioAI Live Dashboard</h1></div>
+  <div style="color:#64748b;font-size:0.85em" id="clockDisplay">--:--:--</div>
+</div>
+
+<div class="grid">
+
+  <!-- Camera -->
+  <div class="card" style="grid-column: span 2;">
+    <h2>Camera Feed</h2>
+    <img class="snapshot-img" id="snapshot" src="/snapshot" alt="Camera">
+    <div class="sub" style="margin-top:8px">
+      <span id="fpsDisplay">-- FPS</span> |
+      Model: <span id="modelDisplay">--</span> |
+      <span id="personsDisplay">0</span> persons
+    </div>
+  </div>
+
+  <!-- Visitors & Stats -->
+  <div class="card">
+    <h2>Event Stats</h2>
+    <div class="value" id="visitorCount">0</div>
+    <div class="sub">Unique visitors today</div>
+    <div class="metrics-grid" style="margin-top:16px">
+      <div class="metric"><div class="num" id="uptimeDisplay">0h</div><div class="lbl">Uptime</div></div>
+      <div class="metric"><div class="num" id="analysesDisplay">0</div><div class="lbl">AI Analyses</div></div>
+      <div class="metric"><div class="num" id="facesKnown">0</div><div class="lbl">Known Faces</div></div>
+    </div>
+  </div>
+
+  <!-- AI Thoughts -->
+  <div class="card" style="grid-column: span 2;">
+    <h2>Tokio's Thoughts</h2>
+    <div id="thoughtsList">
+      <div class="thought-bubble">Waiting for AI...</div>
+    </div>
+  </div>
+
+  <!-- Detections -->
+  <div class="card">
+    <h2>Live Detections</h2>
+    <ul class="det-list" id="detList">
+      <li><span class="label">No detections</span></li>
+    </ul>
+  </div>
+
+  <!-- Drone Control -->
+  <div class="card">
+    <h2>Drone Control</h2>
+    <div class="metrics-grid">
+      <div class="metric"><div class="num" id="droneStatus">OFF</div><div class="lbl">Status</div></div>
+      <div class="metric"><div class="num" id="droneFps">0</div><div class="lbl">FPV FPS</div></div>
+      <div class="metric"><div class="num" id="dronePersons">0</div><div class="lbl">Persons</div></div>
+    </div>
+    <div class="btn-row">
+      <button class="btn" onclick="demoFlight('demo')">Demo</button>
+      <button class="btn" onclick="demoFlight('circle')">Circle</button>
+      <button class="btn" onclick="demoFlight('figure8')">Figure 8</button>
+      <button class="btn" onclick="demoFlight('show_off')">Show Off</button>
+      <button class="btn" onclick="demoFlight('spiral_up')">Spiral</button>
+      <button class="btn danger" onclick="cancelDemo()">Cancel</button>
+    </div>
+    <div class="sub" style="margin-top:8px" id="demoStatus"></div>
+  </div>
+
+  <!-- Emotion Control -->
+  <div class="card">
+    <h2>Emotion</h2>
+    <div class="value" id="currentEmotion">neutral</div>
+    <div class="btn-row">
+      <button class="btn" onclick="setEmotion('NEUTRAL')">Neutral</button>
+      <button class="btn" onclick="setEmotion('HAPPY')">Happy</button>
+      <button class="btn" onclick="setEmotion('CURIOUS')">Curious</button>
+      <button class="btn" onclick="setEmotion('ALERT')">Alert</button>
+      <button class="btn" onclick="setEmotion('ANGRY')">Angry</button>
+      <button class="btn" onclick="setEmotion('LOVE')">Love</button>
+    </div>
+  </div>
+
+  <!-- WiFi Defense -->
+  <div class="card">
+    <h2>WiFi Defense</h2>
+    <div class="metrics-grid">
+      <div class="metric"><div class="num" id="wifiDeauth">0</div><div class="lbl">Deauth</div></div>
+      <div class="metric"><div class="num" id="wifiEvil">0</div><div class="lbl">Evil Twins</div></div>
+      <div class="metric"><div class="num" id="wifiMitigations">0</div><div class="lbl">Mitigations</div></div>
+    </div>
+    <div id="wifiAlerts"></div>
+  </div>
+
+  <!-- Say -->
+  <div class="card">
+    <h2>Send Message</h2>
+    <div style="display:flex;gap:8px">
+      <input id="sayInput" type="text" placeholder="Message for Tokio to display..."
+        style="flex:1;padding:8px 12px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:0.9em">
+      <button class="btn" onclick="sendSay()">Send</button>
+    </div>
+    <div class="btn-row" style="margin-top:8px">
+      <select id="sayColor" style="padding:6px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0">
+        <option value="bright">Bright</option>
+        <option value="ok">OK</option>
+        <option value="warn">Warn</option>
+        <option value="danger">Danger</option>
+        <option value="accent">Accent</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Coffee -->
+  <div class="card">
+    <h2>Coffee Machine</h2>
+    <div id="coffeeStatus" class="sub">Checking...</div>
+    <div class="btn-row">
+      <button class="btn" onclick="brewCoffee('espresso')">Espresso</button>
+      <button class="btn" onclick="brewCoffee('cafe_con_leche')">Con Leche</button>
+      <button class="btn" onclick="brewCoffee('cortado')">Cortado</button>
+      <button class="btn" onclick="brewCoffee('doble')">Doble</button>
+    </div>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+const BASE = '';
+let refreshInterval = 3000;
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.display = 'block';
+  setTimeout(() => t.style.display = 'none', 3000);
+}
+
+async function fetchJSON(url) {
+  try {
+    const r = await fetch(BASE + url);
+    if (!r.ok) return null;
+    return await r.json();
+  } catch { return null; }
+}
+
+async function postJSON(url, data) {
+  try {
+    const r = await fetch(BASE + url, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(data)
+    });
+    return await r.json();
+  } catch(e) { toast('Error: ' + e.message); return null; }
+}
+
+// --- Refresh loops ---
+
+async function refreshStatus() {
+  const d = await fetchJSON('/status');
+  if (!d) return;
+  document.getElementById('modelDisplay').textContent = d.active_model || '--';
+  document.getElementById('personsDisplay').textContent = d.persons_detected || 0;
+  document.getElementById('facesKnown').textContent = d.faces_known || 0;
+  document.getElementById('currentEmotion').textContent = d.emotion || 'neutral';
+  document.getElementById('statusDot').style.background = '#00ff88';
+}
+
+async function refreshVision() {
+  const d = await fetchJSON('/vision/summary');
+  if (!d) return;
+  document.getElementById('fpsDisplay').textContent = (d.fps || 0).toFixed(1) + ' FPS';
+  document.getElementById('personsDisplay').textContent = d.persons || 0;
+
+  const list = document.getElementById('detList');
+  if (d.detections && d.detections.length > 0) {
+    list.innerHTML = d.detections.map(det =>
+      `<li><span class="label">${det.label}</span><span class="conf">${(det.confidence * 100).toFixed(0)}%</span></li>`
+    ).join('');
+  } else {
+    list.innerHTML = '<li><span class="label" style="color:#475569">No detections</span></li>';
+  }
+}
+
+async function refreshThoughts() {
+  const d = await fetchJSON('/thoughts');
+  if (!d || !d.length) return;
+  const container = document.getElementById('thoughtsList');
+  container.innerHTML = d.slice(-5).reverse().map(t =>
+    `<div class="thought-bubble">"${t.text}"<div class="meta">${t.age_s}s ago | ${t.emotion}</div></div>`
+  ).join('');
+}
+
+async function refreshVisitors() {
+  const d = await fetchJSON('/visitors');
+  if (!d) return;
+  document.getElementById('visitorCount').textContent = d.count || 0;
+  if (d.stats) {
+    document.getElementById('uptimeDisplay').textContent = (d.stats.uptime_hours || 0) + 'h';
+    document.getElementById('analysesDisplay').textContent = d.stats.total_analyses || 0;
+  }
+}
+
+async function refreshDrone() {
+  const d = await fetchJSON('/drone/fpv/status');
+  if (!d) {
+    document.getElementById('droneStatus').textContent = 'OFF';
+    return;
+  }
+  document.getElementById('droneStatus').textContent = d.streaming ? d.mode.toUpperCase() : 'OFF';
+  document.getElementById('droneFps').textContent = d.fps || 0;
+  document.getElementById('dronePersons').textContent = d.persons || 0;
+}
+
+async function refreshDemoStatus() {
+  const d = await fetchJSON('/drone/demo/status');
+  if (!d) return;
+  const el = document.getElementById('demoStatus');
+  if (d.running) {
+    el.textContent = `Running: ${d.pattern} (step ${d.step}/${d.total_steps})`;
+  } else {
+    el.textContent = d.error ? `Error: ${d.error}` : '';
+  }
+}
+
+async function refreshWifi() {
+  const d = await fetchJSON('/wifi/status');
+  if (!d || !d.available) return;
+  document.getElementById('wifiDeauth').textContent = d.deauth_detected || 0;
+  document.getElementById('wifiEvil').textContent = d.evil_twins || 0;
+  document.getElementById('wifiMitigations').textContent = d.mitigations || 0;
+
+  const alerts = document.getElementById('wifiAlerts');
+  if (d.deauth_detected > 0 || d.evil_twins > 0) {
+    alerts.innerHTML = `<div class="wifi-alert">Active attacks detected! Counter-deauth: ${d.counter_deauth ? 'ON' : 'OFF'}</div>`;
+  } else {
+    alerts.innerHTML = '';
+  }
+}
+
+async function refreshCoffee() {
+  const d = await fetchJSON('/coffee/status');
+  const el = document.getElementById('coffeeStatus');
+  if (!d || !d.available) {
+    el.textContent = 'Not connected';
+    return;
+  }
+  el.textContent = d.status || 'Ready';
+}
+
+function refreshSnapshot() {
+  const img = document.getElementById('snapshot');
+  img.src = '/snapshot?' + Date.now();
+}
+
+function updateClock() {
+  document.getElementById('clockDisplay').textContent = new Date().toLocaleTimeString();
+}
+
+// --- Actions ---
+
+async function setEmotion(emotion) {
+  const r = await postJSON('/emotion', {emotion});
+  if (r && r.ok) toast('Emotion: ' + emotion);
+}
+
+async function demoFlight(pattern) {
+  const r = await postJSON('/drone/demo', {pattern, speed: 2});
+  if (r && r.ok) toast('Demo flight: ' + pattern);
+  else if (r) toast(r.error || 'Failed');
+}
+
+async function cancelDemo() {
+  const r = await postJSON('/drone/demo/cancel', {});
+  if (r) toast('Demo cancelled');
+}
+
+async function sendSay() {
+  const input = document.getElementById('sayInput');
+  const text = input.value.trim();
+  if (!text) return;
+  const color = document.getElementById('sayColor').value;
+  const r = await postJSON('/say', {text, color});
+  if (r && r.ok) { toast('Sent!'); input.value = ''; }
+}
+
+async function brewCoffee(drink) {
+  const r = await postJSON('/coffee/brew', {drink});
+  if (r && r.ok) toast('Brewing ' + drink + '!');
+  else if (r) toast(r.error || 'Failed');
+}
+
+// Enter key for say input
+document.getElementById('sayInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') sendSay();
+});
+
+// --- Main loop ---
+function refreshAll() {
+  refreshStatus();
+  refreshVision();
+  refreshThoughts();
+  refreshVisitors();
+  refreshDrone();
+  refreshDemoStatus();
+  refreshWifi();
+  refreshCoffee();
+  refreshSnapshot();
+  updateClock();
+}
+
+refreshAll();
+setInterval(refreshAll, refreshInterval);
+setInterval(updateClock, 1000);
+</script>
+</body>
+</html>

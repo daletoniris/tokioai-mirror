@@ -31,6 +31,10 @@ services:
       # SSH keys for remote host/router control via Tailscale mesh
       # - /path/to/ssh-keys/id_ed25519_router:/root/.ssh/id_ed25519_tokio_router:ro
       # - /path/to/ssh-keys/id_ed25519_host:/root/.ssh/id_ed25519_tokio_host:ro
+    ports:
+      # Expose agent API on host for Raspi Entity access via Tailscale
+      # Note: GCP already maps 8000->8001 in current deployment
+      - "0.0.0.0:8001:8000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:

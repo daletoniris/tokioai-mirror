@@ -41,10 +41,16 @@ class TelloUDP:
         self.host = host
         self.port = port
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self._sock.bind(("", port))
         self._sock.settimeout(7)
         self._lock = threading.Lock()
         self.is_flying = False
+        # Continuous RC sender thread — Tello needs RC every 50ms
+        self._rc_lock = threading.Lock()
+        self._rc_values = [0, 0, 0, 0]  # lr, fb, ud, yaw
+        self._rc_running = False
+        self._rc_thread: Optional[threading.Thread] = None
 
     def _cmd(self, command: str, timeout: float = 7) -> str:
         with self._lock:
@@ -122,6 +128,48 @@ class TelloUDP:
     def streamon(self): return self._cmd("streamon")
     def streamoff(self): return self._cmd("streamoff")
 
+    def rc(self, lr: int, fb: int, ud: int, yaw: int):
+        """Set RC values — sent continuously by background thread at 20Hz."""
+        lr = max(-100, min(100, lr))
+        fb = max(-100, min(100, fb))
+        ud = max(-100, min(100, ud))
+        yaw = max(-100, min(100, yaw))
+        with self._rc_lock:
+            self._rc_values = [lr, fb, ud, yaw]
+        # Start RC thread if not running
+        if not self._rc_running:
+            self.start_rc_loop()
+
+    def start_rc_loop(self):
+        """Start continuous RC sender (20Hz). Call after takeoff."""
+        if self._rc_running:
+            return
+        self._rc_running = True
+        self._rc_thread = threading.Thread(target=self._rc_loop, daemon=True)
+        self._rc_thread.start()
+        logger.info("RC sender thread started (20Hz)")
+
+    def stop_rc_loop(self):
+        """Stop continuous RC sender. Call on land."""
+        self._rc_running = False
+        with self._rc_lock:
+            self._rc_values = [0, 0, 0, 0]
+        if self._rc_thread:
+            self._rc_thread.join(timeout=1)
+        logger.info("RC sender thread stopped")
+
+    def _rc_loop(self):
+        """Background: send current RC values to Tello every 50ms."""
+        while self._rc_running:
+            with self._rc_lock:
+                lr, fb, ud, yaw = self._rc_values
+            cmd = f"rc {lr} {fb} {ud} {yaw}"
+            try:
+                self._sock.sendto(cmd.encode(), (self.host, self.port))
+            except Exception as e:
+                logger.error(f"RC send error: {e}")
+            time.sleep(0.05)  # 50ms = 20Hz
+
     def end(self):
         try: self._sock.close()
         except: pass
@@ -187,12 +235,14 @@ SAFETY_PRESETS = {
 # ---------------------------------------------------------------------------
 
 AUTHORIZED_IPS = {
-    "127.0.0.1",        # localhost
-    "::1",              # localhost ipv6
-    "YOUR_RASPI_TAILSCALE_IP",    # this Raspi (Tailscale)
-    "YOUR_WAF_TAILSCALE_IP",  # GCP TokioAI (Tailscale)
-    "YOUR_DEV_TAILSCALE_IP",    # Dev machine (Tailscale)
-    "YOUR_SUBNET_TAILSCALE_IP",    # Subnet router (Tailscale)
+    "127.0.0.1",            # localhost
+    "::1",                  # localhost ipv6
+    "100.100.80.12",        # this Raspi (Tailscale)
+    "100.125.151.118",      # GCP TokioAI (Tailscale)
+    "100.79.121.13",        # Dev machine (Tailscale)
+    "100.64.237.35",        # Subnet router (Tailscale)
+    "192.168.8.161",        # Raspi LAN
+    "192.168.8.235",        # Dev machine LAN
 }
 # Additional IPs from env
 _extra = os.getenv("DRONE_AUTHORIZED_IPS", "")
@@ -208,13 +258,13 @@ DEMO_ALLOWED_COMMANDS = {
     "move", "rotate", "status", "battery", "telemetry",
     "stream_on", "stream_off", "take_photo",
     "patrol",  # patrol with geofence is safe
+    "rc",      # RC control for visual servoing (clamped values)
 }
 
 DEMO_BLOCKED_COMMANDS = {
     "flip",         # risky indoors
     "go_xyz",       # raw coordinate control
     "curve",        # complex trajectory
-    "rc_control",   # raw RC — bypasses safety
     "motor_on",     # raw motor control
     "motor_off",
     "reboot",       # could lose control
@@ -377,11 +427,16 @@ class DroneSafetyProxy:
                        "ACTIVATED", blocked=False)
         logger.critical("KILL SWITCH ACTIVATED")
 
-        if self._drone and self._armed:
+        if self._drone:
             try:
-                self._drone.emergency()
-            except Exception as e:
-                logger.error(f"Emergency command failed: {e}")
+                self._drone.stop_rc_loop()
+            except Exception:
+                pass
+            if self._armed:
+                try:
+                    self._drone.emergency()
+                except Exception as e:
+                    logger.error(f"Emergency command failed: {e}")
 
         self._armed = False
         return "KILL SWITCH ACTIVATED — all motors stopped"
@@ -421,9 +476,10 @@ class DroneSafetyProxy:
         if not authorized:
             return False, reason
 
-        # Rate limiting
-        if not self.rate_limiter.check():
-            return False, "Rate limited — too many commands"
+        # Rate limiting (skip for RC, battery, telemetry — they're high-frequency by design)
+        if command not in ("rc", "battery", "telemetry", "status"):
+            if not self.rate_limiter.check():
+                return False, "Rate limited — too many commands"
 
         # Demo mode command whitelist
         if self.safety_level == SafetyLevel.DEMO:
@@ -453,7 +509,8 @@ class DroneSafetyProxy:
         if self._drone:
             try:
                 battery = self._drone.get_battery()
-                if battery < self.geofence.min_battery_pct:
+                # -1 means query failed — don't block takeoff for unknown battery
+                if battery >= 0 and battery < self.geofence.min_battery_pct:
                     return False, f"Battery too low: {battery}% (min: {self.geofence.min_battery_pct}%)"
             except Exception:
                 pass
@@ -572,6 +629,7 @@ class DroneSafetyProxy:
             self._current_position = {"x": 0, "y": 0, "z": 50}
             if self._drone:
                 self._drone.takeoff()
+                self._drone.start_rc_loop()  # Start continuous RC sender
             self._start_watchdog()
             if self._tracker:
                 self._tracker.activate()
@@ -579,6 +637,7 @@ class DroneSafetyProxy:
 
         elif command == "land":
             if self._drone:
+                self._drone.stop_rc_loop()  # Stop RC sender before landing
                 self._drone.land()
             self._armed = False
             self._current_position["z"] = 0
@@ -658,6 +717,15 @@ class DroneSafetyProxy:
         elif command == "flight_log":
             return str(self.audit.get_recent(20))
 
+        elif command == "rc":
+            lr = int(params.get("lr", 0))
+            fb = int(params.get("fb", 0))
+            ud = int(params.get("ud", 0))
+            yaw = int(params.get("yaw", 0))
+            if self._drone:
+                self._drone.rc(lr, fb, ud, yaw)
+            return f"RC: lr={lr} fb={fb} ud={ud} yaw={yaw}"
+
         return f"Unknown command: {command}"
 
     def _do_connect(self, params: dict) -> str:
@@ -670,6 +738,13 @@ class DroneSafetyProxy:
                 self._drone = None
                 self._connected = True
                 return "Connected (SIMULATION mode)"
+            # Close existing drone socket before creating new one
+            if self._drone:
+                try:
+                    self._drone._sock.close()
+                except Exception:
+                    pass
+                self._drone = None
             tello = TelloUDP(host=host)
             tello.connect()
             self._drone = tello
@@ -886,10 +961,10 @@ class DroneSafetyProxy:
         if not self._armed or not self._drone:
             return
 
-        # Battery check
+        # Battery check (ignore -1 which means read error)
         try:
             battery = self._drone.get_battery()
-            if battery < self.geofence.min_battery_pct:
+            if battery > 0 and battery < self.geofence.min_battery_pct:
                 logger.critical(f"LOW BATTERY: {battery}% — auto-landing")
                 self.audit.log("watchdog", "AUTO_LAND", {"reason": "low_battery"},
                                f"Battery {battery}%", blocked=False)
@@ -1031,43 +1106,103 @@ def create_drone_api(proxy: DroneSafetyProxy):
 
     @api.route("/drone/wifi/connect", methods=["POST"])
     def wifi_connect():
-        """Switch Raspi WiFi to Tello network."""
+        """Connect wlan0 (internal WiFi) to Tello drone WiFi (T0K10-NET).
+
+        wlan0 = internal WiFi, switches from home network to drone network.
+        wlan1 = external USB adapter, stays in monitor mode for WiFi defense.
+        Tailscale runs over eth0 (cable), so connectivity is never lost.
+        """
         import subprocess
+
+        iface = "wlan0"
         profile = "tello-drone"
+        steps = []
+
         try:
+            # Update profile to use wlan0
+            subprocess.run(
+                ["sudo", "nmcli", "connection", "modify", profile,
+                 "802-11-wireless.band", "bg",
+                 "connection.interface-name", iface],
+                capture_output=True, timeout=5
+            )
+            steps.append(f"profile configured for {iface}")
+
+            tello_ssid = ""
+
+            # If we found a specific TELLO SSID, update the profile
+            if tello_ssid:
+                subprocess.run(
+                    ["sudo", "nmcli", "connection", "modify", profile,
+                     "802-11-wireless.ssid", tello_ssid],
+                    capture_output=True, timeout=5
+                )
+                steps.append(f"profile ssid set to {tello_ssid}")
+
+            # Step 4: Connect
             r = subprocess.run(
-                ["sudo", "nmcli", "connection", "up", profile],
-                capture_output=True, text=True, timeout=15
+                ["sudo", "nmcli", "connection", "up", profile, "ifname", iface],
+                capture_output=True, text=True, timeout=20
             )
             if r.returncode == 0:
-                logger.info(f"WiFi switched to {profile}")
-                return jsonify({"ok": True, "result": f"WiFi connected to {profile}"})
+                steps.append("connected!")
+                logger.info(f"Drone WiFi connected via {iface}: {tello_ssid}")
+                return jsonify({"ok": True, "steps": steps,
+                                "result": f"Connected to {tello_ssid or profile} on {iface}"})
             else:
-                return jsonify({"ok": False, "error": r.stderr.strip()}), 500
+                steps.append(f"connect failed: {r.stderr.strip()}")
+
+                # Fallback: try direct connect if profile doesn't work
+                if tello_ssid:
+                    r2 = subprocess.run(
+                        ["sudo", "nmcli", "dev", "wifi", "connect", tello_ssid,
+                         "ifname", iface],
+                        capture_output=True, text=True, timeout=20
+                    )
+                    if r2.returncode == 0:
+                        steps.append("fallback connect OK!")
+                        return jsonify({"ok": True, "steps": steps,
+                                        "result": f"Connected to {tello_ssid} on {iface}"})
+                    steps.append(f"fallback failed: {r2.stderr.strip()}")
+
+                return jsonify({"ok": False, "steps": steps,
+                                "error": "Could not connect to Tello WiFi"}), 500
+
         except Exception as e:
-            return jsonify({"ok": False, "error": str(e)}), 500
+            steps.append(f"exception: {str(e)}")
+            return jsonify({"ok": False, "steps": steps, "error": str(e)}), 500
 
     @api.route("/drone/wifi/disconnect", methods=["POST"])
     def wifi_disconnect():
-        """Switch Raspi WiFi back to main network."""
+        """Disconnect wlan0 from Tello WiFi and reconnect to home network (MrM35G)."""
         import subprocess
-        profile = "MrM35G"
+
+        steps = []
+
         try:
-            r = subprocess.run(
-                ["sudo", "nmcli", "connection", "up", profile],
-                capture_output=True, text=True, timeout=15
+            # Disconnect from Tello
+            subprocess.run(
+                ["sudo", "nmcli", "connection", "down", "tello-drone"],
+                capture_output=True, timeout=10
             )
-            if r.returncode == 0:
-                logger.info(f"WiFi switched back to {profile}")
-                return jsonify({"ok": True, "result": f"WiFi restored to {profile}"})
-            else:
-                return jsonify({"ok": False, "error": r.stderr.strip()}), 500
+            steps.append("tello-drone disconnected")
+
+            # Reconnect wlan0 to home network
+            subprocess.run(
+                ["sudo", "nmcli", "connection", "up", "MrM35G", "ifname", "wlan0"],
+                capture_output=True, timeout=15
+            )
+            steps.append("MrM35G reconnected on wlan0")
+
+            logger.info("Drone WiFi disconnected, home network restored on wlan0")
+            return jsonify({"ok": True, "steps": steps,
+                            "result": "Home network restored on wlan0"})
         except Exception as e:
-            return jsonify({"ok": False, "error": str(e)}), 500
+            return jsonify({"ok": False, "steps": steps, "error": str(e)}), 500
 
     @api.route("/drone/wifi/status", methods=["GET"])
     def wifi_status():
-        """Get current WiFi connection status."""
+        """Get current WiFi connection status for drone."""
         import subprocess
         try:
             r = subprocess.run(
@@ -1075,9 +1210,21 @@ def create_drone_api(proxy: DroneSafetyProxy):
                 capture_output=True, text=True, timeout=5
             )
             connections = r.stdout.strip().split("\n") if r.stdout.strip() else []
-            on_tello = any("tello" in c.lower() or "t0k10" in c.lower() for c in connections)
+            on_tello = any("tello" in c.lower() for c in connections)
+
+            # Check wlan1 mode
+            iw_r = subprocess.run(
+                ["iw", "dev", "wlan1", "info"],
+                capture_output=True, text=True, timeout=5
+            )
+            wlan1_mode = "unknown"
+            for line in iw_r.stdout.split("\n"):
+                if "type" in line.lower():
+                    wlan1_mode = line.strip().split()[-1] if line.strip() else "unknown"
+
             return jsonify({
                 "on_tello_wifi": on_tello,
+                "wlan1_mode": wlan1_mode,
                 "active_connections": connections,
                 "drone_connected": proxy._connected,
             })
@@ -1143,6 +1290,40 @@ def create_drone_api(proxy: DroneSafetyProxy):
         if not jpg:
             return Response("No frame", status=503)
         return Response(jpg, mimetype="image/jpeg")
+
+    # --- Drone Vision (visual servoing from entity camera) ---
+
+    _vision_player = None
+
+    @api.route("/drone/vision/status", methods=["GET"])
+    def vision_status():
+        if _vision_player:
+            return jsonify(_vision_player.get_status())
+        return jsonify({"mode": "idle", "registered": False, "detected": False})
+
+    @api.route("/drone/vision/mode", methods=["POST"])
+    def vision_mode():
+        nonlocal _vision_player
+        data = request.get_json(force=True, silent=True) or {}
+        mode = data.get("mode", "track")
+        if _vision_player is None:
+            from .drone_vision import DroneVisionPlayer
+            _vision_player = DroneVisionPlayer()
+            _vision_player.start()
+            proxy._vision_player = _vision_player
+        _vision_player.set_mode(mode)
+        return jsonify({"ok": True, "mode": mode})
+
+    @api.route("/drone/vision/register", methods=["POST"])
+    def vision_register():
+        nonlocal _vision_player
+        if _vision_player is None:
+            from .drone_vision import DroneVisionPlayer
+            _vision_player = DroneVisionPlayer()
+            _vision_player.start()
+            proxy._vision_player = _vision_player
+        _vision_player.set_mode("register")
+        return jsonify({"ok": True, "status": "Show drone to camera, registering..."})
 
     return api
 

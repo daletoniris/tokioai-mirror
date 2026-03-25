@@ -31,6 +31,7 @@ from pydantic import BaseModel
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from ..engine.agent import TokioAgent
+from ..engine.entity_sync import on_security_event, security_dashboard
 
 logger = logging.getLogger(__name__)
 
@@ -201,6 +202,57 @@ async def chat(request: ChatRequest):
     except Exception as e:
         logger.error(f"Chat error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Entity Events (push from Raspi) ──
+
+class EntityEvent(BaseModel):
+    type: str  # wifi_attack, ble_attack, face_detected, service_down, etc.
+    attack_type: Optional[str] = None
+    message: str = ""
+    severity: str = "info"
+    attacker: Optional[str] = None
+    data: Optional[Dict] = None
+
+
+@app.post("/entity/event")
+async def entity_event(event: EntityEvent):
+    """Receive events pushed from the Raspi Entity.
+
+    WiFi attacks, BLE attacks, face detections, service status, etc.
+    The core processes them: logs, triggers router defense, notifies via Telegram.
+    """
+    logger.info(f"Entity event: {event.type} [{event.severity}] {event.message}")
+
+    # Track in security dashboard
+    if event.type in ("wifi_attack", "ble_attack", "network_scan"):
+        await on_security_event(
+            event_type=event.type,
+            message=event.message,
+            severity=event.severity,
+            attacker=event.attacker or "",
+        )
+
+    # TODO Phase 5: trigger router defense for wifi_attack
+    # TODO: send Telegram notification for critical events
+
+    return {"ok": True, "type": event.type, "blocked_today": security_dashboard.blocked_today}
+
+
+@app.get("/security/dashboard")
+async def security_dash():
+    """Security dashboard data — attacks blocked, recent events."""
+    return security_dashboard.get_summary()
+
+
+@app.get("/self-healing/status")
+async def self_healing_status():
+    """Get self-healing engine status — all monitored services."""
+    agent = get_agent()
+    return {
+        "services": agent.self_healing.get_status(),
+        "recent_actions": agent.self_healing.get_log(20),
+    }
 
 
 @app.websocket("/ws")

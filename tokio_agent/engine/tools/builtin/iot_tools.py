@@ -424,9 +424,8 @@ def alexa_speak(text: str, device_name: str = "default") -> str:
 def alexa_play_music(query: str, device_name: str = "default") -> str:
     """Play music on Alexa via Home Assistant.
 
-    Uses alexa_media notify service to send a voice command like
-    'play [query] on Amazon Music' which gives much more accurate results
-    than the generic media_player/play_media approach.
+    Uses media_player/play_media first (direct control), then falls back
+    to alexa_media notify with sequence command.
     """
     eid = _resolve_alexa(device_name)
     if not _is_allowed(eid):
@@ -435,47 +434,52 @@ def alexa_play_music(query: str, device_name: str = "default") -> str:
     # Ensure device is on and at reasonable volume
     _ha_post("media_player/turn_on", {"entity_id": eid}, timeout=10)
     _ha_post("media_player/volume_set", {"entity_id": eid, "volume_level": 0.35}, timeout=10)
-    time.sleep(1.0)
+    time.sleep(0.5)
 
-    # Method 1: alexa_media notify with voice command (most accurate)
-    # This sends a voice command as if you said it to Alexa
-    ok, detail = _ha_post("notify/alexa_media", {
-        "message": f"play {query}",
-        "target": [eid],
-        "data": {"type": "tts"},
-    })
-    if ok:
-        time.sleep(4)
+    def _check_playing() -> str:
         st_ok, _, data = _ha_get_state(eid)
         if st_ok and data.get("state") == "playing":
             title = data.get("attributes", {}).get("media_title", "")
             artist = data.get("attributes", {}).get("media_artist", "")
             now_playing = f" ({title}" + (f" - {artist})" if artist else ")") if title else ""
             return f"✅ Reproduciendo en {eid}: '{query}'{now_playing}"
+        return ""
 
-    # Method 2: alexa_media notify with ANNOUNCE type (sends as command)
-    ok2, detail2 = _ha_post("notify/alexa_media", {
-        "message": f"play {query} on Amazon Music",
-        "target": [eid],
-        "data": {"type": "announce"},
-    })
-    if ok2:
-        time.sleep(4)
-        st_ok, _, data = _ha_get_state(eid)
-        if st_ok and data.get("state") == "playing":
-            return f"✅ Reproduciendo en {eid}: '{query}'"
-
-    # Method 3: Fallback to play_media with MUSIC type
-    ok3, _ = _ha_post("media_player/play_media", {
+    # Method 1: Direct play_media with MUSIC content type
+    ok, _ = _ha_post("media_player/play_media", {
         "entity_id": eid,
         "media_content_type": "AMAZON_MUSIC",
         "media_content_id": query,
     })
-    if ok3:
+    if ok:
         time.sleep(3)
-        st_ok, _, data = _ha_get_state(eid)
-        if st_ok and data.get("state") == "playing":
-            return f"✅ Reproduciendo en {eid}: '{query}' (Amazon Music)"
+        result = _check_playing()
+        if result:
+            return result
+
+    # Method 2: play_media with generic music type
+    ok2, _ = _ha_post("media_player/play_media", {
+        "entity_id": eid,
+        "media_content_type": "music",
+        "media_content_id": query,
+    })
+    if ok2:
+        time.sleep(3)
+        result = _check_playing()
+        if result:
+            return result
+
+    # Method 3: alexa_media sequence command (sends as voice command, NOT tts)
+    ok3, _ = _ha_post("notify/alexa_media", {
+        "message": f"play {query}",
+        "target": [eid],
+        "data": {"type": "announce"},
+    })
+    if ok3:
+        time.sleep(4)
+        result = _check_playing()
+        if result:
+            return result
         return f"⚠️ Comando enviado a {eid}, verificar manualmente."
 
     return f"❌ No pude reproducir '{query}' en {eid}"

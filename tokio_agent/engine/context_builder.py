@@ -80,6 +80,11 @@ def build_system_prompt(
     if runtime_ctx:
         sections.append(runtime_ctx)
 
+    # 5b. Entity & self-healing context
+    entity_ctx = _build_entity_context()
+    if entity_ctx:
+        sections.append(entity_ctx)
+
     # 6. Core behavioral rules
     sections.append(CORE_RULES)
 
@@ -128,6 +133,56 @@ def _build_runtime_context() -> str:
         parts.append(f"## Multimedia: {', '.join(caps)}")
 
     return "\n".join(parts) if len(parts) > 1 else ""
+
+
+def _build_entity_context() -> str:
+    """Build context about the Entity, self-healing, and security state."""
+    parts = []
+
+    try:
+        from .entity_sync import security_dashboard, check_entity_alive
+        summary = security_dashboard.get_summary()
+        if summary.get("blocked_today", 0) > 0:
+            parts.append(f"## Security: {summary['blocked_today']} attacks blocked today")
+            by_type = summary.get("by_type", {})
+            if by_type:
+                parts.append(f"- Types: {by_type}")
+    except Exception:
+        pass
+
+    try:
+        from .self_healing import SelfHealingEngine
+        # We can't access the agent's instance here, but we note the capability
+        parts.append(
+            "## Self-Healing: ACTIVE\n"
+            "- You monitor Entity, HA, BLE Health, Drone Proxy automatically\n"
+            "- If a service is down, you auto-repair it (SSH restart, docker restart)\n"
+            "- Use raspi_vision(action='status') to check Entity health"
+        )
+    except Exception:
+        pass
+
+    parts.append(
+        "## Intelligent Reasoning\n"
+        "- When reporting temperature: met.no gives OUTDOOR temp, not indoor.\n"
+        "  If HA shows 11C from met.no, say 'Afuera hay 11C' not 'La casa esta a 11C'.\n"
+        "- Cross-reference data from multiple sources before reporting.\n"
+        "- If a sensor shows 'unavailable', diagnose why (HA restart, BLE disconnect, etc).\n"
+        "- You ARE the Entity. The Raspi face is YOUR face. The camera is YOUR eye.\n"
+        "  When someone asks 'que ves?', check your camera. You are one being.\n"
+        "## AI Brain Corrections\n"
+        "- When the user asks you to CORRECT something you say/see (e.g. 'no digas Nigeria',\n"
+        "  'el cartel dice X', 'no tengo bigote'), use raspi_vision(action='ai_correct',\n"
+        "  params={'correction': '...'}) to teach the AI Brain. Do NOT call 'see' or 'look'\n"
+        "  repeatedly — that just reads the camera, it doesn't fix the problem.\n"
+        "- To teach a fact: raspi_vision(action='ai_teach', params={'key': '...', 'value': '...'})\n"
+        "- To remove a wrong observation: raspi_vision(action='ai_forget', params={'key': '...'})\n"
+        "- ONE correction call is enough. Never loop on vision tools when the user wants a correction."
+    )
+
+    if parts:
+        return "# Entity Awareness\n\n" + "\n".join(parts)
+    return ""
 
 
 CORE_RULES = """# Critical Rules

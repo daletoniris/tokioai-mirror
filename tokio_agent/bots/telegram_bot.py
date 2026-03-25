@@ -542,6 +542,150 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await _reply_long(update, result)
 
 
+# ── Video handling (extract frames → Claude Vision) ──
+
+TOKIO_VIDEO_MAX_BYTES = int(os.getenv("TOKIO_VIDEO_MAX_BYTES", "20000000"))  # 20MB default
+TOKIO_VIDEO_MAX_FRAMES = int(os.getenv("TOKIO_VIDEO_MAX_FRAMES", "4"))  # max frames to extract
+
+
+def _extract_video_frames_sync(video_path: str, max_frames: int = 4) -> list:
+    """Extract key frames from a video using ffmpeg (synchronous).
+
+    Returns list of (frame_bytes, mime_type) tuples.
+    """
+    import subprocess as sp
+    frames = []
+
+    # Get video duration
+    try:
+        probe = sp.run(
+            ["ffprobe", "-v", "quiet", "-show_entries", "format=duration",
+             "-of", "csv=p=0", video_path],
+            capture_output=True, text=True, timeout=10,
+        )
+        duration = float(probe.stdout.strip() or "5")
+    except Exception:
+        duration = 5.0
+
+    # Calculate timestamps to extract (evenly spaced)
+    if duration <= 0:
+        duration = 5.0
+    n = min(max_frames, max(1, int(duration // 2)))  # 1 frame per 2 seconds, max 4
+    timestamps = [duration * (i + 1) / (n + 1) for i in range(n)]
+
+    for i, ts in enumerate(timestamps):
+        out_path = f"{video_path}_frame{i}.jpg"
+        try:
+            sp.run(
+                ["ffmpeg", "-y", "-ss", str(ts), "-i", video_path,
+                 "-frames:v", "1", "-q:v", "2", out_path],
+                capture_output=True, timeout=15,
+            )
+            frame_data = pathlib.Path(out_path).read_bytes()
+            if len(frame_data) > 100:  # sanity check
+                frames.append((frame_data, "image/jpeg"))
+        except Exception as e:
+            logger.debug(f"Frame extraction failed at {ts}s: {e}")
+        finally:
+            try:
+                os.unlink(out_path)
+            except Exception:
+                pass
+
+    return frames
+
+
+async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle video/video_note messages — extract frames and analyze with Claude Vision."""
+    if not await _guard_access(update):
+        return
+    if not update.message or not update.effective_user:
+        return
+
+    user_id = update.effective_user.id
+    caption = (update.message.caption or "").strip()
+
+    # Get video file_id (supports video, video_note, animation)
+    video = update.message.video or update.message.video_note or update.message.animation
+    if not video:
+        return
+
+    file_size = getattr(video, "file_size", 0) or 0
+    if file_size > TOKIO_VIDEO_MAX_BYTES:
+        await _safe_reply_text(
+            update,
+            f"Video demasiado grande ({file_size // 1_000_000}MB). "
+            f"Maximo: {TOKIO_VIDEO_MAX_BYTES // 1_000_000}MB"
+        )
+        return
+
+    await _safe_send_chat_action(context, chat_id=update.effective_chat.id, action="typing")
+
+    # Download video to temp file
+    try:
+        video_bytes = await _download_telegram_file(context, video.file_id)
+    except Exception as e:
+        await _safe_reply_text(update, f"No pude descargar el video: {e}")
+        return
+
+    # Save to temp and extract frames
+    with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
+        tmp.write(video_bytes)
+        tmp_path = tmp.name
+
+    try:
+        loop = asyncio.get_event_loop()
+        frames = await loop.run_in_executor(
+            None, _extract_video_frames_sync, tmp_path, TOKIO_VIDEO_MAX_FRAMES
+        )
+    except Exception as e:
+        logger.error(f"Video frame extraction failed: {e}")
+        frames = []
+
+    try:
+        os.unlink(tmp_path)
+    except Exception:
+        pass
+
+    if not frames:
+        await _safe_reply_text(update, "No pude extraer frames del video. Necesito ffmpeg instalado.")
+        return
+
+    # Build images payload
+    images_payload = []
+    for frame_bytes, mime in frames:
+        b64 = base64.b64encode(frame_bytes).decode("ascii")
+        images_payload.append({"data": b64, "media_type": mime})
+
+    # Build prompt
+    duration_info = f" ({len(frames)} frames extraidos)"
+    if caption:
+        prompt = f"{caption}\n\n[Video recibido{duration_info}. Estas son capturas del video.]"
+    else:
+        prompt = (
+            f"Analiza este video{duration_info}. "
+            "Describe lo que ves en cada frame, detecta movimiento, personas, objetos, "
+            "texto visible y cualquier informacion relevante de seguridad. "
+            "Las imagenes son frames extraidos del video en orden cronologico."
+        )
+
+    session_id = _get_session(user_id)
+
+    async def _keep_typing():
+        while True:
+            await asyncio.sleep(5)
+            await _safe_send_chat_action(context, chat_id=update.effective_chat.id, action="typing")
+
+    typing_task = asyncio.create_task(_keep_typing())
+    try:
+        result = await _send_to_tokio(prompt, session_id, images=images_payload)
+    finally:
+        typing_task.cancel()
+
+    await _send_pending_files(context, update.effective_chat.id, result)
+    await _reply_long(update, result)
+
+
 # ── Document handling (receive files from user) ──
 
 _TEXT_EXTENSIONS = {
@@ -1142,6 +1286,7 @@ def main():
 
     # Content handlers — order matters!
     application.add_handler(MessageHandler(filters.PHOTO, handle_image))
+    application.add_handler(MessageHandler(filters.VIDEO | filters.VIDEO_NOTE | filters.ANIMATION, handle_video))
     application.add_handler(MessageHandler(filters.VOICE, voice_handler))
     application.add_handler(MessageHandler(filters.AUDIO, audio_handler))
     application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
