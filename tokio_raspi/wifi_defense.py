@@ -207,7 +207,9 @@ class WiFiDefense:
 
         self._running = True
         self._stats.monitoring = True
+        self._capture_healthy = True  # watchdog flag
         threading.Thread(target=self._capture_loop, daemon=True).start()
+        threading.Thread(target=self._rx_watchdog, daemon=True).start()
         threading.Thread(target=self._mitigation_loop, daemon=True).start()
         print(f"[WiFiDefense] Active defense started on {self._monitor_mode_iface}")
         return True
@@ -344,50 +346,137 @@ class WiFiDefense:
                 idx += 1
                 time.sleep(2)
 
+    def _rx_watchdog(self):
+        """Monitor rx_packets — if frozen for 60s, the driver died. Trigger USB reset."""
+        rx_path = f"/sys/class/net/{self._monitor_iface}/statistics/rx_packets"
+        last_rx = -1
+        frozen_since = 0
+        while self._running:
+            time.sleep(30)
+            try:
+                rx = int(open(rx_path).read().strip())
+                if rx == last_rx:
+                    if frozen_since == 0:
+                        frozen_since = time.time()
+                    elif time.time() - frozen_since > 60:
+                        print(f"[WiFiDefense] WATCHDOG: rx frozen at {rx} for 60s — triggering USB reset")
+                        self._capture_healthy = False
+                        self._usb_reset_and_restart()
+                        frozen_since = 0
+                else:
+                    frozen_since = 0
+                last_rx = rx
+            except Exception:
+                pass
+
+    def _usb_reset_and_restart(self):
+        """USB reset the adapter and reopen the capture socket."""
+        iface = self._monitor_iface
+        try:
+            usb_dev = os.path.basename(os.path.realpath(
+                f"/sys/class/net/{iface}/device/.."
+            ))
+            if not usb_dev or usb_dev == "/":
+                print(f"[WiFiDefense] WATCHDOG: can't find USB device for {iface}")
+                return
+            unbind = "/sys/bus/usb/drivers/usb/unbind"
+            bind = "/sys/bus/usb/drivers/usb/bind"
+            subprocess.run(["sudo", "bash", "-c", f"echo '{usb_dev}' > {unbind}"],
+                           capture_output=True, timeout=5)
+            time.sleep(3)
+            subprocess.run(["sudo", "bash", "-c", f"echo '{usb_dev}' > {bind}"],
+                           capture_output=True, timeout=5)
+            # Wait for interface to reappear
+            for _ in range(10):
+                time.sleep(1)
+                check = subprocess.run(["ip", "link", "show", iface],
+                                       capture_output=True, text=True, timeout=3)
+                if check.returncode == 0:
+                    break
+            time.sleep(1)
+            # Put back in monitor mode
+            subprocess.run(["sudo", "ip", "link", "set", iface, "down"],
+                           capture_output=True, timeout=5)
+            time.sleep(0.5)
+            subprocess.run(["sudo", "iw", iface, "set", "monitor", "control"],
+                           capture_output=True, timeout=5)
+            time.sleep(0.5)
+            subprocess.run(["sudo", "ip", "link", "set", iface, "up"],
+                           capture_output=True, timeout=5)
+            if self._protected_channel:
+                subprocess.run(["sudo", "iw", "dev", iface, "set", "channel",
+                                str(self._protected_channel)],
+                               capture_output=True, timeout=5)
+            time.sleep(2)
+            print(f"[WiFiDefense] WATCHDOG: USB reset complete, restarting capture")
+            # Restart capture in new thread (old one will exit on socket error)
+            self._capture_healthy = True
+            threading.Thread(target=self._capture_loop, daemon=True).start()
+        except Exception as e:
+            print(f"[WiFiDefense] WATCHDOG: USB reset failed: {e}")
+
     def _capture_loop(self):
-        """Main packet capture loop using scapy."""
+        """Main packet capture loop using a PERSISTENT raw socket.
+
+        CRITICAL: scapy's sniff(timeout=N) opens/closes the socket each call,
+        toggling promiscuous mode on the interface. The rtl8xxxu driver goes
+        DORMANT when promiscuous mode is toggled. Solution: open ONE socket
+        and read from it forever.
+        """
         iface = self._monitor_mode_iface
 
         threading.Thread(target=self._channel_hop_loop, daemon=True).start()
         print(f"[WiFiDefense] Channel hopping started (ch 1-11, 2s interval)")
 
-        def packet_handler(pkt):
-            if not self._running:
-                return
+        # Open a persistent raw socket — never close it
+        import socket as _socket
+        import struct
+
+        try:
+            # AF_PACKET + SOCK_RAW captures all 802.11 frames on monitor interface
+            raw_sock = _socket.socket(_socket.AF_PACKET, _socket.SOCK_RAW, _socket.htons(0x0003))
+            raw_sock.bind((iface, 0))
+            raw_sock.settimeout(1.0)  # 1s timeout for clean shutdown
+            print(f"[WiFiDefense] Persistent raw socket opened on {iface}")
+        except Exception as e:
+            print(f"[WiFiDefense] Failed to open raw socket: {e}")
+            # Fallback: try scapy L2ListenSocket
             try:
-                self._process_packet(pkt)
+                from scapy.arch.linux import L2ListenSocket
+                raw_sock = L2ListenSocket(iface=iface)
+                print(f"[WiFiDefense] Using scapy L2ListenSocket fallback on {iface}")
+            except Exception as e2:
+                print(f"[WiFiDefense] All capture methods failed: {e2}")
+                return
+
+        pkt_count = 0
+        while self._running:
+            try:
+                raw_data = raw_sock.recv(4096)
+                if not raw_data:
+                    continue
+                # Parse with scapy (RadioTap header)
+                try:
+                    pkt = RadioTap(raw_data)
+                    pkt_count += 1
+                    self._process_packet(pkt)
+                except Exception:
+                    pass
+            except _socket.timeout:
+                continue  # normal — just check self._running
+            except (OSError, IOError) as e:
+                if self._running:
+                    print(f"[WiFiDefense] Socket error: {e}")
+                    time.sleep(5)
+                    break
             except Exception:
                 pass
 
-        retry_count = 0
-        while self._running:
-            try:
-                # Re-resolve interface name each time to handle USB resets
-                scapy_conf.iface = iface
-                sniff(
-                    iface=iface,
-                    prn=packet_handler,
-                    store=False,
-                    timeout=10,
-                )
-                retry_count = 0  # successful capture
-            except (OSError, IOError) as e:
-                if self._running:
-                    retry_count += 1
-                    print(f"[WiFiDefense] Capture error (retry {retry_count}): {e}")
-                    if retry_count <= 5:
-                        time.sleep(3)
-                    else:
-                        # Interface may need full re-init
-                        print(f"[WiFiDefense] Re-initializing monitor mode...")
-                        self._enable_monitor_mode()
-                        iface = self._monitor_mode_iface
-                        retry_count = 0
-                        time.sleep(2)
-            except Exception as e:
-                if self._running:
-                    print(f"[WiFiDefense] Capture error: {e}")
-                    time.sleep(3)
+        try:
+            raw_sock.close()
+        except Exception:
+            pass
+        print(f"[WiFiDefense] Capture stopped ({pkt_count} total packets processed)")
 
     def _process_packet(self, pkt):
         """Analyze a captured packet for attacks."""
