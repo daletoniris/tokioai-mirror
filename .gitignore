@@ -38,3 +38,8 @@ Thumbs.db
 # Workspace data (user-specific)
 workspace/sessions/
 workspace/plugins/
+
+# Generated reports and large files
+Reporte_*.pdf
+TokioAI_*.pdf
+*.iso

@@ -22,7 +22,11 @@ def load_builtin_tools(registry: ToolRegistry) -> int:
     count = 0
 
     # ── System tools ──────────────────────────────────────────────────────
-    from .system_tools import bash, python_exec, read_file, write_file
+    from .system_tools import bash, python_exec
+    from .file_tools import (
+        read_file, write_file, edit_file,
+        search_code, find_files, list_files,
+    )
 
     registry.register(
         name="bash",
@@ -49,27 +53,115 @@ def load_builtin_tools(registry: ToolRegistry) -> int:
 
     registry.register(
         name="read_file",
-        description="Lee un archivo del sistema de archivos",
-        category="Sistema",
+        description=(
+            "Lee un archivo con numeros de linea (cat -n). "
+            "Soporta offset/limit para archivos grandes. "
+            "Si path es un directorio, lista su contenido."
+        ),
+        category="Archivos",
         parameters={
-            "path": "Ruta al archivo",
-            "lines": "(Opcional) Máximo de líneas a leer",
+            "path": "Ruta al archivo o directorio",
+            "offset": "(Opcional) Linea desde la que empezar a leer (1-based)",
+            "limit": "(Opcional) Maximo de lineas a leer (default: 2000)",
         },
         executor=read_file,
-        examples=['TOOL:read_file({"path": "/etc/hostname"})'],
+        examples=[
+            'TOOL:read_file({"path": "/etc/hostname"})',
+            'TOOL:read_file({"path": "src/main.py", "offset": 50, "limit": 30})',
+        ],
     )
     count += 1
 
     registry.register(
         name="write_file",
-        description="Escribe contenido a un archivo",
-        category="Sistema",
+        description="Escribe contenido a un archivo. Crea directorios si no existen.",
+        category="Archivos",
         parameters={
             "path": "Ruta al archivo",
             "content": "Contenido a escribir",
         },
         executor=write_file,
         examples=['TOOL:write_file({"path": "/tmp/test.txt", "content": "hola"})'],
+    )
+    count += 1
+
+    registry.register(
+        name="edit_file",
+        description=(
+            "Edita un archivo reemplazando un string exacto por otro. "
+            "old_string debe ser unico en el archivo (o usar replace_all=true). "
+            "Preferir sobre write_file para modificaciones parciales."
+        ),
+        category="Archivos",
+        parameters={
+            "path": "Ruta al archivo a editar",
+            "old_string": "Texto exacto a reemplazar (debe ser unico)",
+            "new_string": "Texto de reemplazo",
+            "replace_all": "(Opcional) true para reemplazar TODAS las ocurrencias",
+        },
+        executor=edit_file,
+        examples=[
+            'TOOL:edit_file({"path": "src/main.py", "old_string": "def old_function():", "new_string": "def new_function():"})',
+            'TOOL:edit_file({"path": "config.py", "old_string": "DEBUG = True", "new_string": "DEBUG = False"})',
+        ],
+    )
+    count += 1
+
+    registry.register(
+        name="search_code",
+        description=(
+            "Busca un patron regex en archivos (como grep/ripgrep). "
+            "Retorna coincidencias con path, linea y contexto."
+        ),
+        category="Archivos",
+        parameters={
+            "pattern": "Patron regex a buscar",
+            "path": "(Opcional) Directorio donde buscar (default: directorio actual)",
+            "include": "(Opcional) Filtro glob de archivos (ej: '*.py')",
+            "context_lines": "(Opcional) Lineas de contexto alrededor de cada match",
+            "max_results": "(Opcional) Maximo de resultados (default: 100)",
+        },
+        executor=search_code,
+        examples=[
+            'TOOL:search_code({"pattern": "def process_message", "include": "*.py"})',
+            'TOOL:search_code({"pattern": "import asyncio", "path": "tokio_agent/", "include": "*.py"})',
+        ],
+    )
+    count += 1
+
+    registry.register(
+        name="find_files",
+        description=(
+            "Busca archivos por patron glob (como find). "
+            "Retorna paths ordenados por fecha de modificacion."
+        ),
+        category="Archivos",
+        parameters={
+            "pattern": "Patron glob (ej: '**/*.py', 'src/**/*.ts')",
+            "path": "(Opcional) Directorio base (default: directorio actual)",
+            "max_results": "(Opcional) Maximo de resultados (default: 200)",
+        },
+        executor=find_files,
+        examples=[
+            'TOOL:find_files({"pattern": "**/*.py"})',
+            'TOOL:find_files({"pattern": "*.yml", "path": "/opt/tokioai-v2/"})',
+        ],
+    )
+    count += 1
+
+    registry.register(
+        name="list_files",
+        description="Lista archivos y directorios con metadata (fecha, tamaño).",
+        category="Archivos",
+        parameters={
+            "path": "(Opcional) Directorio a listar (default: directorio actual)",
+            "show_hidden": "(Opcional) Incluir archivos ocultos (default: false)",
+        },
+        executor=list_files,
+        examples=[
+            'TOOL:list_files({"path": "/opt/tokioai-v2/"})',
+            'TOOL:list_files({"path": ".", "show_hidden": true})',
+        ],
     )
     count += 1
 
@@ -522,16 +614,23 @@ def load_builtin_tools(registry: ToolRegistry) -> int:
 
         registry.register(
             name="document",
-            description="Generación de documentos: generate_pdf, generate_slides, generate_csv",
+            description=(
+                "Generacion de documentos. Para PDF SIEMPRE incluir content o sections. "
+                "content es un string con todo el texto. sections es lista de {heading, body}."
+            ),
             category="Productividad",
             parameters={
-                "action": "generate_pdf, generate_slides, generate_csv",
-                "params": "title, content, sections, data, output_path, template",
+                "action": "generate_pdf | generate_slides | generate_csv",
+                "title": "(Optional) Titulo del documento. Default: Reporte TokioAI",
+                "content": "(Optional) Texto completo del reporte como string. Usar para PDFs simples.",
+                "sections": "(Optional) Lista de {heading, body} para PDFs con secciones",
+                "data": "(Optional) Lista de filas para CSV: [[col1,col2],[val1,val2]]",
+                "output_path": "(Optional) Ruta de salida",
             },
             executor=document_tool,
             examples=[
-                'TOOL:document({"action": "generate_pdf", "params": {"title": "Reporte WAF", "sections": [{"heading": "Resumen", "body": "..."}]}})',
-                'TOOL:document({"action": "generate_csv", "params": {"data": [["IP","Hits"],["1.2.3.4","100"]], "output_path": "/workspace/report.csv"}})',
+                '{"action": "generate_pdf", "title": "Reporte", "content": "Clima: 20C despejado\\nSalud: HR 84 bpm\\nWAF: 150 ataques bloqueados"}',
+                '{"action": "generate_pdf", "title": "Reporte WAF", "sections": [{"heading": "Resumen", "body": "150 ataques"}, {"heading": "Top IPs", "body": "1.2.3.4: 50"}]}',
             ],
         )
         count += 1

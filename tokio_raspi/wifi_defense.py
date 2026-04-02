@@ -102,6 +102,21 @@ class WiFiDefense:
         # Own MACs — NEVER treat our own traffic as attacks
         self._own_macs: set[str] = set()
 
+        # Capture diagnostics — visible via API for debugging
+        self._diag = {
+            "total_packets": 0,
+            "deauth_frames": 0,
+            "beacon_frames": 0,
+            "probe_frames": 0,
+            "other_frames": 0,
+            "capture_restarts": 0,
+            "usb_resets": 0,
+            "last_packet_time": 0,
+            "last_deauth_time": 0,
+            "socket_errors": 0,
+            "capture_start_time": 0,
+        }
+
         # Mitigation settings
         self.auto_reconnect = True
         self.counter_deauth = True
@@ -371,6 +386,7 @@ class WiFiDefense:
 
     def _usb_reset_and_restart(self):
         """USB reset the adapter and reopen the capture socket."""
+        self._diag["usb_resets"] += 1
         iface = self._monitor_iface
         try:
             usb_dev = os.path.basename(os.path.realpath(
@@ -449,22 +465,46 @@ class WiFiDefense:
                 print(f"[WiFiDefense] All capture methods failed: {e2}")
                 return
 
+        self._diag["capture_start_time"] = time.time()
+        self._diag["capture_restarts"] += 1
         pkt_count = 0
+        deauth_raw = 0
+        last_stats_log = time.time()
         while self._running:
             try:
                 raw_data = raw_sock.recv(4096)
                 if not raw_data:
                     continue
+                now = time.time()
                 # Parse with scapy (RadioTap header)
                 try:
                     pkt = RadioTap(raw_data)
                     pkt_count += 1
+                    self._diag["total_packets"] = pkt_count
+                    self._diag["last_packet_time"] = now
+                    if pkt.haslayer(Dot11Deauth):
+                        deauth_raw += 1
+                        self._diag["deauth_frames"] = deauth_raw
+                        self._diag["last_deauth_time"] = now
+                    elif pkt.haslayer(Dot11Beacon):
+                        self._diag["beacon_frames"] += 1
+                    elif pkt.haslayer(Dot11) and pkt.type == 0 and pkt.subtype == 4:
+                        self._diag["probe_frames"] += 1
+                    else:
+                        self._diag["other_frames"] += 1
                     self._process_packet(pkt)
                 except Exception:
                     pass
+                # Log stats every 60s for first 10min, then every 5min
+                stats_interval = 60 if (now - self._diag["capture_start_time"]) < 600 else 300
+                if now - last_stats_log > stats_interval:
+                    print(f"[WiFiDefense] Stats: {pkt_count} pkts, {deauth_raw} raw deauths, "
+                          f"{self._stats.deauth_detected} detected, {self._stats.evil_twins} evil twins")
+                    last_stats_log = now
             except _socket.timeout:
                 continue  # normal — just check self._running
             except (OSError, IOError) as e:
+                self._diag["socket_errors"] += 1
                 if self._running:
                     print(f"[WiFiDefense] Socket error: {e}")
                     time.sleep(5)
@@ -756,6 +796,28 @@ class WiFiDefense:
             "mitigated": a.mitigated,
         } for a in attacks]
 
+    def get_diagnostics(self) -> dict:
+        """Get capture diagnostics for debugging."""
+        d = dict(self._diag)
+        # Add rx_packets from sysfs
+        try:
+            rx = int(open(f"/sys/class/net/{self._monitor_iface}/statistics/rx_packets").read().strip())
+            d["rx_packets"] = rx
+        except Exception:
+            d["rx_packets"] = -1
+        try:
+            d["operstate"] = open(f"/sys/class/net/{self._monitor_iface}/operstate").read().strip()
+        except Exception:
+            d["operstate"] = "unknown"
+        d["protected_ssid"] = self._protected_ssid
+        d["protected_channel"] = self._protected_channel
+        d["own_macs"] = list(self._own_macs)
+        d["known_aps_count"] = len(self._known_aps)
+        # Time since last packet
+        if d["last_packet_time"] > 0:
+            d["seconds_since_last_packet"] = round(time.time() - d["last_packet_time"], 1)
+        return d
+
     def get_stats(self) -> WiFiDefenseStats:
         with self._lock:
             return WiFiDefenseStats(
@@ -765,5 +827,5 @@ class WiFiDefense:
                 mitigations_applied=self._stats.mitigations_applied,
                 monitoring=self._stats.monitoring,
                 monitor_interface=self._stats.monitor_interface,
-                attacks=[a for a in self._attacks if time.time() - a.timestamp < 300],
+                attacks=[a for a in self._attacks if time.time() - a.timestamp < 120],
             )

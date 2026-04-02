@@ -43,9 +43,16 @@ BATTERY_HANDLE = "0x001a"
 HR_CCCD_HANDLE = "0x005c"
 HR_VALUE_HANDLE = "0x005b"
 FEE3_HANDLE = "0051"
+FEE3_CCCD_HANDLE = "0x0052"  # CCCD for FEE3 notifications (BP/SpO2/steps)
+FEE5_HANDLE = "0x0054"       # Write handle for sending commands to watch
+STEPS_HANDLE = "004c"        # Steps/activity notification handle (FEE1)
+STEPS_CCCD_HANDLE = "0x004d" # CCCD for FEE1 steps notifications
+STEPS_META_HANDLE = "0046"   # Steps metadata notification handle (FEA1)
+STEPS_META_CCCD_HANDLE = "0x0047"  # CCCD for FEA1
 
-BATTERY_POLL_INTERVAL = 300
+BATTERY_POLL_INTERVAL = 120  # re-subscribe + battery every 2 min
 RECONNECT_INTERVAL = 20
+DATA_TIMEOUT = 600  # 10 min without data -> force reconnect
 
 HEALTH_DATA_DIR = os.getenv("TOKIO_HEALTH_DIR", os.path.expanduser("~/.tokio_health"))
 HEALTH_LOG_FILE = os.path.join(HEALTH_DATA_DIR, "health_log.json")
@@ -233,6 +240,7 @@ class HealthMonitor:
         self._available = False
         self._log: list[dict] = []
         self._log_lock = threading.Lock()
+        self._last_data_time = 0
 
         # Security
         self._security = BLESecurity(watch_addr)
@@ -420,29 +428,33 @@ class HealthMonitor:
             print(f"[Health] BLE reset failed: {e}")
 
     def _run_loop(self):
-        """Persistent gatttool connection — listens for all health notifications."""
+        """Interactive gatttool with stdbuf line buffering — subscribes HR + FEE3 + keep-alive."""
         import select as _select
         consecutive_failures = 0
+        self._last_data_time = time.time()
 
         while self._running:
             proc = None
             try:
-                # Auto-reset BLE adapter after 5 consecutive failures
                 if consecutive_failures > 0 and consecutive_failures % 5 == 0:
                     self._reset_ble_adapter()
 
-                # Track connection for hijack detection
                 self._security.track_connection()
 
+                # stdbuf -oL forces line buffering (gatttool uses block buffer in pipe mode)
                 proc = subprocess.Popen(
-                    ["gatttool", "-b", self._addr, "-t", "public",
-                     "--char-write-req", "-a", HR_CCCD_HANDLE, "-n", "0100",
-                     "--listen"],
-                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+                    ["stdbuf", "-oL", "gatttool", "-b", self._addr, "-t", "public", "-I"],
+                    stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE, text=True
                 )
 
                 print("[Health] Connecting to watch...")
+                proc.stdin.write("connect\n")
+                proc.stdin.flush()
+
                 connected = False
+                subscribed = False
+                last_keepalive = 0
 
                 while self._running:
                     try:
@@ -453,15 +465,80 @@ class HealthMonitor:
                                 print("[Health] Connection lost (EOF)")
                                 break
                             line = line.strip()
-                            if "written successfully" in line.lower():
-                                if not connected:
-                                    connected = True
-                                    consecutive_failures = 0  # reset on success
-                                    self._data.connected = True
-                                    print("[Health] Connected — listening for HR/BP/SpO2...")
+
+                            # Strip ANSI escape codes
+                            line = re.sub(r'\x1b\[[0-9;]*m', '', line)
+                            # Skip empty lines and prompt echoes
+                            if not line or line.endswith(">") or line.startswith("Attempting"):
+                                continue
+
+                            if "Connection successful" in line and not connected:
+                                connected = True
+                                consecutive_failures = 0
+                                self._data.connected = True
+                                self._last_data_time = time.time()
+                                print("[Health] Connected — subscribing to HR + FEE3...")
+
+                            elif "written successfully" in line.lower():
+                                pass  # normal — subscribe confirmation
+
                             elif "Notification" in line and "value" in line.lower():
+                                self._last_data_time = time.time()
                                 self._parse_notification(line)
-                    except Exception:
+
+                            elif "Characteristic value/descriptor:" in line:
+                                # Battery read response
+                                match = re.search(r'descriptor:\s*([0-9a-fA-F ]+)', line)
+                                if match:
+                                    raw = [int(b, 16) for b in match.group(1).strip().split()]
+                                    if raw and 0 <= raw[0] <= 100:
+                                        self._data.battery = raw[0]
+                                        self._data.last_update = time.time()
+                                        self._log_reading(bat=raw[0])
+                                        print(f"[Health] Battery: {raw[0]}%")
+
+                            elif "disconnect" in line.lower():
+                                print(f"[Health] Disconnected: {line}")
+                                break
+
+                        # After connection, send subscribe commands (once)
+                        if connected and not subscribed:
+                            time.sleep(0.5)
+                            # Subscribe to ALL notification handles
+                            for cccd in (HR_CCCD_HANDLE, FEE3_CCCD_HANDLE,
+                                         STEPS_CCCD_HANDLE, STEPS_META_CCCD_HANDLE):
+                                proc.stdin.write(f"char-write-req {cccd} 0100\n")
+                                proc.stdin.flush()
+                                time.sleep(0.3)
+                            # Read battery
+                            proc.stdin.write(f"char-read-hnd {BATTERY_HANDLE}\n")
+                            proc.stdin.flush()
+                            subscribed = True  # set immediately to prevent re-sending
+                            print("[Health] Subscribed to HR + FEE3 + Steps — listening...")
+
+                        # Keep-alive every 5 min: re-subscribe + read battery
+                        now = time.time()
+                        if subscribed and now - last_keepalive > BATTERY_POLL_INTERVAL:
+                            last_keepalive = now
+                            try:
+                                # Re-subscribe all CCCDs (watch may drop notification state)
+                                for cccd in (HR_CCCD_HANDLE, FEE3_CCCD_HANDLE,
+                                             STEPS_CCCD_HANDLE, STEPS_META_CCCD_HANDLE):
+                                    proc.stdin.write(f"char-write-req {cccd} 0100\n")
+                                    proc.stdin.flush()
+                                    time.sleep(0.2)
+                                proc.stdin.write(f"char-read-hnd {BATTERY_HANDLE}\n")
+                                proc.stdin.flush()
+                            except Exception:
+                                break
+
+                        # Data watchdog: no notifications for 10 min -> force reconnect
+                        if subscribed and now - self._last_data_time > DATA_TIMEOUT:
+                            print(f"[Health] No data for {DATA_TIMEOUT}s — forcing reconnect")
+                            break
+
+                    except Exception as e:
+                        print(f"[Health] Read error: {e}")
                         break
 
                     if proc.poll() is not None:
@@ -531,8 +608,18 @@ class HealthMonitor:
         elif handle == FEE3_HANDLE:
             self._handle_fee3(raw)
 
+        # Steps/activity (handle 0x004c) — direct step count
+        elif handle == STEPS_HANDLE:
+            self._handle_steps_direct(raw)
+
+        # Steps metadata (handle 0x0046) — prefixed with 0x07
+        elif handle == STEPS_META_HANDLE:
+            if raw and raw[0] == 0x07 and len(raw) >= 8:
+                self._handle_steps_direct(raw[1:])
+
+        # Silently ignore other handles (prompts, echoes, etc.)
         else:
-            print(f"[Health] Unknown handle 0x{handle}: {[hex(b) for b in raw]}")
+            pass
 
     def _handle_hr(self, raw: list[int]):
         """Parse standard BLE HR Measurement."""
@@ -644,3 +731,21 @@ class HealthMonitor:
                         pass
         else:
             print(f"[Health] Steps sub=0x{sub:02x}: {[hex(b) for b in raw]}")
+
+    def _handle_steps_direct(self, raw: list[int]):
+        """Parse steps from direct notification (handle 0x004c).
+
+        Format: [steps_lo, steps_hi, 0, distance_lo, distance_hi, 0, calories_lo, calories_hi, 0]
+        """
+        if len(raw) < 7:
+            return
+        steps = raw[0] | (raw[1] << 8)
+        distance = raw[3] | (raw[4] << 8)
+        calories = raw[6] | (raw[7] << 8) if len(raw) >= 8 else 0
+        if 0 < steps < 100000:
+            self._data.steps = steps
+            self._data.distance = distance
+            self._data.calories = calories
+            self._data.last_steps_time = time.time()
+            self._data.last_update = time.time()
+            self._data.connected = True

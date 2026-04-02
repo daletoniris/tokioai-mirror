@@ -18,7 +18,7 @@ import logging
 import os
 from typing import Dict, List, Optional
 
-from .base import BaseLLM, LLMResponse
+from .base import BaseLLM, LLMResponse, ToolUseBlock
 
 logger = logging.getLogger(__name__)
 
@@ -99,22 +99,17 @@ class AnthropicLLM(BaseLLM):
             self._client = Anthropic(api_key=self._api_key)
             logger.info(f"🧠 Anthropic API direct: model={self.model}")
 
-    async def generate(
+    def _build_messages(
         self,
-        system_prompt: str,
         user_prompt: str,
-        conversation: Optional[List[Dict[str, str]]] = None,
-        max_tokens: int = 4096,
-        temperature: float = 0.3,
+        conversation: Optional[List[Dict]] = None,
         images: Optional[List[Dict[str, str]]] = None,
-    ) -> LLMResponse:
-        self._ensure_client()
-
+    ) -> list:
+        """Build the messages list for the API call."""
         messages: list = []
         if conversation:
             messages.extend(conversation)
 
-        # Build user message content (multimodal if images present)
         if images:
             content: list = []
             for img in images:
@@ -131,27 +126,65 @@ class AnthropicLLM(BaseLLM):
         else:
             messages.append({"role": "user", "content": user_prompt})
 
+        return messages
+
+    def _parse_response(self, response) -> LLMResponse:
+        """Parse an Anthropic API response into LLMResponse with tool_use support."""
+        text_parts = []
+        tool_uses = []
+
+        for block in (response.content or []):
+            if getattr(block, "type", None) == "text":
+                text_parts.append(block.text)
+            elif getattr(block, "type", None) == "tool_use":
+                tool_uses.append(ToolUseBlock(
+                    id=block.id,
+                    name=block.name,
+                    input=block.input,
+                ))
+
+        usage = getattr(response, "usage", None)
+
+        return LLMResponse(
+            text="\n".join(text_parts),
+            model=self.model,
+            provider="anthropic-vertex" if self._use_vertex else "anthropic",
+            input_tokens=getattr(usage, "input_tokens", 0) if usage else 0,
+            output_tokens=getattr(usage, "output_tokens", 0) if usage else 0,
+            finish_reason=getattr(response, "stop_reason", ""),
+            tool_use=tool_uses if tool_uses else None,
+            raw=response,
+        )
+
+    async def generate(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        conversation: Optional[List[Dict[str, str]]] = None,
+        max_tokens: int = 4096,
+        temperature: float = 0.3,
+        images: Optional[List[Dict[str, str]]] = None,
+        tools: Optional[list] = None,
+    ) -> LLMResponse:
+        self._ensure_client()
+
+        messages = self._build_messages(user_prompt, conversation, images)
+
         kwargs = {
             "model": self.model,
             "max_tokens": max_tokens,
             "messages": messages,
+            "system": system_prompt,
         }
 
-        # Vertex AI: system prompt goes as 'system' parameter
-        # For older Vertex API that doesn't support 'system', combine into user prompt
-        if self._use_vertex:
-            # Try system parameter first (supported since mid-2025)
-            kwargs["system"] = system_prompt
-        else:
-            kwargs["system"] = system_prompt
-            kwargs["temperature"] = temperature
+        if tools:
+            kwargs["tools"] = tools
 
         try:
             response = await asyncio.to_thread(
                 self._client.messages.create, **kwargs
             )
         except Exception as e:
-            # If system parameter fails on Vertex, retry with combined prompt
             if self._use_vertex and "system" in str(e).lower():
                 logger.warning("Vertex AI system param failed, combining into prompt")
                 del kwargs["system"]
@@ -165,18 +198,120 @@ class AnthropicLLM(BaseLLM):
             else:
                 raise
 
-        text = response.content[0].text if response.content else ""
-        usage = getattr(response, "usage", None)
+        return self._parse_response(response)
 
-        return LLMResponse(
-            text=text,
-            model=self.model,
-            provider="anthropic-vertex" if self._use_vertex else "anthropic",
-            input_tokens=getattr(usage, "input_tokens", 0) if usage else 0,
-            output_tokens=getattr(usage, "output_tokens", 0) if usage else 0,
-            finish_reason=getattr(response, "stop_reason", ""),
-            raw=response,
+    async def generate_with_tools(
+        self,
+        system_prompt: str,
+        messages: list,
+        tools: list,
+        max_tokens: int = 4096,
+    ) -> LLMResponse:
+        """Generate with native tool use — the core method for agentic loops.
+
+        Args:
+            system_prompt: System prompt.
+            messages: Full conversation including tool_result blocks.
+            tools: Anthropic tool definitions.
+            max_tokens: Max tokens.
+
+        Returns:
+            LLMResponse with tool_use blocks if the model wants to call tools.
+        """
+        self._ensure_client()
+
+        kwargs = {
+            "model": self.model,
+            "max_tokens": max_tokens,
+            "messages": messages,
+            "system": system_prompt,
+            "tools": tools,
+        }
+
+        response = await asyncio.to_thread(
+            self._client.messages.create, **kwargs
         )
+        return self._parse_response(response)
+
+    async def stream_with_tools(
+        self,
+        system_prompt: str,
+        messages: list,
+        tools: list,
+        max_tokens: int = 4096,
+    ):
+        """Stream response with native tool use support.
+
+        Yields events:
+            ("text", str)       — text token
+            ("tool_use", ToolUseBlock) — complete tool use block
+            ("done", LLMResponse)      — final response with all data
+        """
+        self._ensure_client()
+
+        kwargs = {
+            "model": self.model,
+            "max_tokens": max_tokens,
+            "messages": messages,
+            "system": system_prompt,
+            "tools": tools,
+        }
+
+        import queue
+        import threading
+
+        event_queue: queue.Queue = queue.Queue()
+
+        def _run_stream():
+            try:
+                with self._client.messages.stream(**kwargs) as stream:
+                    for event in stream:
+                        event_type = getattr(event, "type", "")
+
+                        if event_type == "content_block_start":
+                            block = getattr(event, "content_block", None)
+                            if block and getattr(block, "type", "") == "tool_use":
+                                event_queue.put(("tool_start", {
+                                    "id": block.id,
+                                    "name": block.name,
+                                }))
+
+                        elif event_type == "content_block_delta":
+                            delta = getattr(event, "delta", None)
+                            if delta:
+                                delta_type = getattr(delta, "type", "")
+                                if delta_type == "text_delta":
+                                    event_queue.put(("text", delta.text))
+                                elif delta_type == "input_json_delta":
+                                    event_queue.put(("tool_json", delta.partial_json))
+
+                    msg = stream.get_final_message()
+                    event_queue.put(("done", msg))
+            except Exception as e:
+                event_queue.put(("error", e))
+
+        thread = threading.Thread(target=_run_stream, daemon=True)
+        thread.start()
+
+        while True:
+            try:
+                kind, value = await asyncio.to_thread(event_queue.get, timeout=0.1)
+            except Exception:
+                if not thread.is_alive():
+                    break
+                continue
+
+            if kind == "text":
+                yield ("text", value)
+            elif kind == "tool_start":
+                yield ("tool_start", value)
+            elif kind == "tool_json":
+                yield ("tool_json", value)
+            elif kind == "done":
+                yield ("done", self._parse_response(value))
+                break
+            elif kind == "error":
+                raise value
 
     def display_name(self) -> str:
         nice = self.model

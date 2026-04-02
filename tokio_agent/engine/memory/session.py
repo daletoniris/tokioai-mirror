@@ -61,18 +61,22 @@ class SessionManager:
         })
         session["metadata"]["updated_at"] = datetime.now().isoformat()
 
-        # Keep only last 80 messages to prevent context bloat
-        if len(session["messages"]) > 80:
-            session["messages"] = session["messages"][-80:]
+        # Soft cap at 200 messages as safety net (compaction handles the real limit)
+        if len(session["messages"]) > 200:
+            session["messages"] = session["messages"][-200:]
 
         self._save_session(session_id)
 
     def get_conversation(
         self,
         session_id: str,
-        max_messages: int = 40,
+        max_messages: int = 100,
     ) -> List[Dict[str, str]]:
-        """Get conversation history formatted for the LLM."""
+        """Get conversation history formatted for the LLM.
+
+        Returns up to max_messages. Token-based compaction in the agent
+        handles the real context limit — this just caps message count.
+        """
         session = self.get_session(session_id)
         if not session:
             return []
@@ -82,6 +86,35 @@ class SessionManager:
             {"role": m["role"], "content": m["content"]}
             for m in messages
         ]
+
+    def replace_messages(
+        self,
+        session_id: str,
+        new_messages: List[Dict[str, str]],
+    ) -> None:
+        """Replace all messages in a session (used after compaction).
+
+        Args:
+            session_id: The session to update.
+            new_messages: New message list [{"role": ..., "content": ...}].
+        """
+        session = self.get_session(session_id)
+        if not session:
+            self.create_session(session_id)
+            session = self._sessions[session_id]
+
+        # Convert to internal format with timestamps
+        from datetime import datetime
+        session["messages"] = [
+            {
+                "role": m["role"],
+                "content": m["content"],
+                "timestamp": m.get("timestamp", datetime.now().isoformat()),
+            }
+            for m in new_messages
+        ]
+        session["metadata"]["updated_at"] = datetime.now().isoformat()
+        self._save_session(session_id)
 
     def list_sessions(self, limit: int = 20) -> List[Dict[str, Any]]:
         """List recent sessions."""

@@ -1120,22 +1120,61 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Combined status: health + engine stats + features."""
     if not await _guard_access(update):
         return
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(f"{CLI_SERVICE_URL}/health")
-            if resp.status_code == 200:
-                data = resp.json()
-                await _safe_reply_text(
-                    update,
-                    f"TokioAI v{data.get('version', '?')}\n"
-                    f"LLM: {data.get('llm', '?')}\n"
-                    f"Tools: {data.get('tools', '?')}\n"
-                    f"Estado: {data.get('status', '?')}"
-                )
+            # Fetch health and stats in parallel
+            health_resp, stats_resp = await asyncio.gather(
+                client.get(f"{CLI_SERVICE_URL}/health"),
+                client.get(f"{CLI_SERVICE_URL}/stats"),
+                return_exceptions=True,
+            )
+
+            lines = ["📊 TokioAI Status\n"]
+
+            # Health info
+            if isinstance(health_resp, Exception):
+                lines.append("❌ Agent: no responde")
+            elif health_resp.status_code == 200:
+                h = health_resp.json()
+                lines.append(f"✅ Agent: {h.get('status', '?')}")
+                lines.append(f"🤖 LLM: {h.get('llm', '?')}")
+                lines.append(f"🔧 Tools: {h.get('tools', '?')}")
             else:
-                await _safe_reply_text(update, "Servicio no disponible")
+                lines.append(f"⚠️ Agent: HTTP {health_resp.status_code}")
+
+            # Stats info
+            if not isinstance(stats_resp, Exception) and stats_resp.status_code == 200:
+                s = stats_resp.json()
+                tokens = s.get("total_tokens", 0)
+                if tokens > 0:
+                    lines.append(f"📝 Tokens: {tokens:,}")
+                tools_exec = s.get("tools_executed", 0)
+                if tools_exec > 0:
+                    lines.append(f"⚡ Tools ejecutadas: {tools_exec}")
+                compactions = s.get("compactions", 0)
+                if compactions > 0:
+                    lines.append(f"🗜 Compactaciones: {compactions}")
+                mem = s.get("auto_memory", {})
+                mem_saved = mem.get("total_memories_saved", 0)
+                if mem_saved > 0:
+                    lines.append(f"🧠 Memorias: {mem_saved}")
+                sub = s.get("subagents", {})
+                if sub.get("total_spawned", 0) > 0:
+                    lines.append(f"👷 Workers: {sub['total_spawned']} total, {sub.get('running', 0)} activos")
+
+            # Engine features
+            lines.append("\n🚀 Features activas:")
+            lines.append("  • Auto-compact (context management)")
+            lines.append("  • Auto-memory (persistent learning)")
+            lines.append("  • Skills (/commands)")
+            lines.append("  • Subagents (parallel workers)")
+            lines.append("  • Structured file editing")
+
+            await _safe_reply_text(update, "\n".join(lines))
+
     except Exception as e:
         await _safe_reply_text(update, f"Error: {str(e)[:200]}")
 
@@ -1283,6 +1322,35 @@ def main():
     application.add_handler(CommandHandler("allow", allow_command))
     application.add_handler(CommandHandler("deny", deny_command))
     application.add_handler(CommandHandler("acl", acl_command))
+
+    # Catch-all for unrecognized /commands — pass them to the engine as skills
+    async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Route unrecognized /commands to the engine's skill system."""
+        if not await _guard_access(update):
+            return
+        if _is_duplicate_update(update.update_id):
+            return
+        user_id = update.effective_user.id
+        session_id = _get_session(user_id)
+        message_text = update.message.text
+        logger.info(f"User {user_id} skill: {message_text}")
+
+        await _safe_send_chat_action(context, chat_id=update.effective_chat.id, action="typing")
+
+        async def _keep_typing():
+            while True:
+                await asyncio.sleep(5)
+                await _safe_send_chat_action(context, chat_id=update.effective_chat.id, action="typing")
+
+        typing_task = asyncio.create_task(_keep_typing())
+        try:
+            result = await _send_to_tokio(message_text, session_id)
+        finally:
+            typing_task.cancel()
+
+        await _reply_long(update, result)
+
+    application.add_handler(MessageHandler(filters.COMMAND, unknown_command))
 
     # Content handlers — order matters!
     application.add_handler(MessageHandler(filters.PHOTO, handle_image))

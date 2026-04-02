@@ -37,7 +37,7 @@ class ToolExecutor:
     """Executes tools from the registry with robust error handling."""
 
     # Tools that can take a long time
-    SLOW_TOOLS = {"bash", "python", "docker", "gcp_waf", "host_control"}
+    SLOW_TOOLS = {"bash", "python", "docker", "gcp_waf", "host_control", "subagent"}
     DEFAULT_TIMEOUT = 60
     SLOW_TIMEOUT = 300
 

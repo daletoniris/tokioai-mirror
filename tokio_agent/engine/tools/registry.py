@@ -88,29 +88,85 @@ class ToolRegistry:
         return self._tools.pop(name, None) is not None
 
     def describe_for_prompt(self) -> str:
-        """Generate a compact description of all tools for the LLM prompt."""
+        """Generate a compact description of all tools for the LLM prompt.
+
+        Note: With native tool use, the API handles tool descriptions.
+        This is only used as supplementary context.
+        """
         if not self._tools:
             return "No tools available."
 
-        lines = [f"You have {len(self._tools)} tools available:\n"]
+        lines = [f"You have {len(self._tools)} tools available. Use them freely to accomplish tasks.\n"]
 
         for cat, tools in sorted(self.list_by_category().items()):
             lines.append(f"## {cat}")
             for t in tools:
                 params_str = ", ".join(t.parameters.keys()) if t.parameters else "(none)"
                 lines.append(f"- **{t.name}**({params_str}): {t.description}")
-                if t.examples:
-                    for ex in t.examples[:2]:
-                        lines.append(f"  Example: `{ex}`")
             lines.append("")
 
-        lines.append(
-            '## How to call tools\n'
-            'Respond with one or more lines:\n'
-            '```\n'
-            'TOOL:tool_name({"param": "value"})\n'
-            '```\n'
-            'For tools with no params: `TOOL:tool_name()`\n'
-            'You can call multiple tools. Results will be provided after execution.'
-        )
         return "\n".join(lines)
+
+    def to_anthropic_tools(self) -> list:
+        """Export tools as Anthropic API tool definitions.
+
+        Returns list of dicts compatible with the Anthropic tools parameter.
+        """
+        tools = []
+        for t in self._tools.values():
+            # Build JSON schema from parameter descriptions
+            properties = {}
+            required = []
+            for param_name, param_desc in t.parameters.items():
+                # Detect type hints in description
+                param_type = "string"
+                desc_lower = param_desc.lower()
+                if "true|false" in desc_lower or "boolean" in desc_lower:
+                    param_type = "boolean"
+                elif param_name == "tasks" or (param_desc.startswith("[") and "list" in desc_lower):
+                    param_type = "array"
+                elif param_name == "params" or "dict" in desc_lower or "objeto" in desc_lower:
+                    # Parameters like "params" in iot_control, gcp_waf, etc. are objects
+                    param_type = "object"
+
+                prop: dict = {"type": param_type, "description": param_desc}
+                if param_type == "array":
+                    prop["items"] = {"type": "object"}
+                properties[param_name] = prop
+
+                # Mark as required if not described as optional
+                if "optional" not in param_desc.lower() and "default" not in param_desc.lower():
+                    required.append(param_name)
+
+            tool_def = {
+                "name": t.name,
+                "description": t.description,
+                "input_schema": {
+                    "type": "object",
+                    "properties": properties,
+                },
+            }
+            if required:
+                tool_def["input_schema"]["required"] = required
+
+            tools.append(tool_def)
+
+        return tools
+
+    def to_openai_tools(self) -> list:
+        """Export tools as OpenAI API tool definitions.
+
+        OpenAI format wraps each tool in {"type": "function", "function": {...}}.
+        """
+        anthropic_tools = self.to_anthropic_tools()
+        openai_tools = []
+        for t in anthropic_tools:
+            openai_tools.append({
+                "type": "function",
+                "function": {
+                    "name": t["name"],
+                    "description": t["description"],
+                    "parameters": t["input_schema"],
+                },
+            })
+        return openai_tools

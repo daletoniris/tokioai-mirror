@@ -1,0 +1,581 @@
+
+                             _______________
+                            |               |
+                            |  .  .  .  .   |
+                            |   . _/\_ .    |
+                            |    / oo \     |
+                            |   | \__/ |    |
+                            |    \    /     |
+                            |     \  /      |
+                            |      \/       |
+                            |_______________|
+
+              _____ _       ____ _ _     ____        __          _
+             | ____| |     | __ |_| |_  |  _ \  ___ / _| ___  _| |_ _   _  ___  ___  ___
+             |  _| | |     |  _ \| | __| | | | |/ _ \ |_ / _ \/ __| __|| | | |/ _ \/ __|/ _ \
+             | |___| |___  | |_) | | |_  | |_| |  __/  _|  __/ (__| |_ | |_| | (_) \__ \ (_) |
+             |_____|_____| |____/|_|\__| |____/ \___|_|  \___|\___|\__| \__,_|\___/|___/\___/
+
+
+                                    HACKZINE VOL. 1
+                                       2 0 2 6
+
+                             Autor ........... [REDACTED]
+                             Lugar ........... 42 grados sur
+                             Tirada .......... esta copia
+                             Precio .......... gratis o te lo roban
+
+
+==============================================================================
+                          T A B L A  D E  C O N T E N I D O
+==============================================================================
+
+      00 ...................... Interference (esto que estas leyendo)
+      01 ...................... El taller junto al cementerio
+      02 ...................... La Gillette
+      03 ...................... 25
+      04 ...................... Maquinas que vuelan
+      05 ...................... Maquinas que ven
+      06 ...................... Maquinas que hablan
+      07 ...................... Romper para entender
+      08 ...................... El altar
+      09 ...................... La guerra silenciosa
+      10 ...................... 4 likes
+      11 ...................... No hay nada alla
+      -- ...................... Ruido de fondo (creditos)
+
+==============================================================================
+
+
+==============================================================================
+                         00 -- INTERFERENCE
+==============================================================================
+
+Hay un bit que no encaja.
+
+En algun registro de algun sistema hay un bit que deberia ser 0 y es 1. O
+deberia ser 1 y es 0. No importa. El punto es que no encaja. El sistema
+funciona igual, nadie lo nota, pero el bit esta ahi. Haciendo ruido. Generando
+una interferencia minima que no aparece en ningun log, en ningun dashboard, en
+ningun reporte.
+
+Este hackzine es la historia de ese bit.
+
+Si estas leyendo esto es porque alguien lo fotocopio y te lo paso, o lo
+encontraste en algun rincón de internet donde las cosas todavia son gratis. No
+busques al autor. El autor no existe. Solo existe la interferencia.
+
+Lo que vas a leer es real. Los numeros son reales. Los ataques son reales. Las
+maquinas son reales. El taller es real. La Gillette es real. Solo el nombre
+falta.
+
+Porque el nombre no importa.
+Lo que importa es el ruido.
+
+
+==============================================================================
+                 01 -- EL TALLER JUNTO AL CEMENTERIO
+==============================================================================
+
+Hay un pueblo chico en el litoral argentino. Tiene un barrio que da a un
+cementerio. En ese barrio hay un taller de electronica. En ese taller hay un
+hermano mayor y un nene.
+
+El nene no tiene computadora. Tiene estano, una lupa, cables de colores, y un
+hermano que le dice: "si lo podes imaginar, lo podes construir."
+
+Construyen transmisores FM. Con eso escuchan a los vecinos y los vecinos los
+escuchan a ellos. Construyen microfonos espia. Construyen repelentes de
+mosquitos. Construyen cosas que hacen ruido y cosas que lo escuchan.
+
+Pero el nene tambien sale. Se arrastra por la tierra. Se mete debajo de las
+piedras. Mira insectos durante horas. No los mata — los estudia. Quiere
+entender por que la hormiga va para ahi y no para alla. Por que el grillo
+canta de noche. Por que las aranas hacen la tela en espiral y no en
+cuadricula.
+
+Construye un hormiguero artificial para observar comportamiento emergente. No
+sabe que se llama asi. Solo sabe que las hormigas se organizan sin jefe y eso
+le parece imposible y hermoso.
+
+Construye un pluviometro con una lata de duraznos.
+Un barometro.
+Un higrometro con pelo humano (funciona, el pelo se estira con la humedad).
+Un telescopio con lentes viejos que encuentra en una optica.
+
+La pared del taller da al cementerio. De un lado, circuitos. Del otro,
+muertos. El nene crece entre las dos cosas: lo que se construye y lo que se
+termina. Y decide, sin saberlo, que el va a estar del lado de los que
+construyen.
+
+
+==============================================================================
+                         02 -- LA GILLETTE
+==============================================================================
+
+Un dia el nene consigue un manual de biologia. Uno viejo, con dibujos en
+blanco y negro. Hay un capitulo sobre anatomia de anfibios. Hay un diagrama
+que muestra como abrir una rana y que hay adentro.
+
+El nene consigue una rana. Consigue una Gillette. Se sienta en el piso del
+taller, con el manual abierto al lado, y hace exactamente lo que dice el
+diagrama. Corte por corte. Organo por organo.
+
+No es crueldad. Es necesidad. Es la misma pulsion que lo lleva a desarmar
+radios, a mirar hormigas, a medir la lluvia. NECESITA saber como funcionan las
+cosas por dentro.
+
+Esa pulsion nunca se va.
+
+Veinte anos despues, la Gillette es un debugger.
+El debugger es un TensorFlow.
+El TensorFlow es un framework de ataques adversariales.
+El framework es un WAF autonomo que disecciona ataques en tiempo real.
+
+La herramienta cambia. La pulsion es la misma.
+
+Abrir. Mirar. Entender. Reconstruir.
+
+Siempre fue lo mismo.
+
+
+==============================================================================
+                              03 -- 25
+==============================================================================
+
+A los 25, el nene vuelve. Habia estado dormido — haciendo cosas normales,
+teniendo trabajos normales, viviendo una vida normal. Pero el bit defectuoso
+no se queda quieto. Tarde o temprano hace ruido.
+
+Empieza con malware. Agarra ejecutables y los abre como abria la rana.
+Desensambla, mira, entiende, reconstruye. Reverse engineering. La Gillette
+digital.
+
+Migra al sur. Al fin del mundo. Patagonia. Un lugar donde el viento te ensena
+que la persistencia no es opcional y los pinguinos superan a los developers.
+
+Reporta vulnerabilidades en sistemas reales. Produccion. Infraestructura
+critica. Responsible disclosure. No para ganar plata ni fama ni CVEs. Para
+arreglar cosas. Porque estan rotas y el las puede ver.
+
+Mira alrededor y no hay nadie.
+
+No hay comunidad de hacking. No hay meetups. No hay charlas. No hay nadie
+ensenando seguridad en toda la region. En un radio de mil kilometros de
+estepa, el es el unico que sabe lo que es un buffer overflow.
+
+Entonces funda una. Desde cero. Como el hormiguero. Como el transmisor FM.
+Como todo.
+
+20 charlas. Speakers de todo LATAM viniendo al fin del mundo a hablar de
+seguridad. Porque alguien tuvo que empezar. Porque si no existe, lo construis.
+
+"El bit defectuoso del fin del mundo."
+
+Eso dice su bio. La unica cosa honesta que escribio en internet.
+
+
+==============================================================================
+                    04 -- MAQUINAS QUE VUELAN
+==============================================================================
+
+El taller junto al cementerio nunca se cerro. Solo se mudo.
+
+Ahora el taller tiene un soldador azul, un multimetro, un tubo de epoxi
+argentino, y la misma regla: si lo podes imaginar, lo podes construir.
+
+No compra un drone. Construye drones.
+
+Flight controller con Arduino. MPU6050 para sensor fusion. PID para
+estabilizar. Motor mixing para que cuatro motores se pongan de acuerdo. Todo
+desde cero. Todo escrito a mano. Todo probado volando (y cayendo, y
+rompiendo, y reconstruyendo, y volviendo a volar).
+
+Despues: piloto autonomo. Una computadora arriba del drone que decide a donde
+ir. Redes neuronales para volar. OpenCV para ver. Waypoints para navegar. Un
+drone que no necesita piloto. Que se pilotea solo.
+
+Despues: firmware custom con sonar ultrasonico para mantener altitud adentro
+de una habitacion. Firmware con sensor de humedad para drones que miden el
+ambiente mientras vuelan.
+
+Y robotica con bloques de juguete argentinos. Rasti + Arduino + infrarrojo.
+Porque la innovacion no necesita equipamiento caro. Necesita la misma pulsion
+del nene con la Gillette. Abrir, mirar, entender, reconstruir.
+
+Ahora hay un quadcopter colgado en la pared del taller. Fibra de carbono.
+Motores violeta. Sin helices. Retirado del servicio. Montado como una reliquia
+de guerra. Como un halcon disecado. Cuatro brazos abiertos. Un angel
+crucificado hecho de carbono y cobre.
+
+Ya volo. Ya peleo. Ahora vigila.
+
+
+==============================================================================
+                      05 -- MAQUINAS QUE VEN
+==============================================================================
+
+Si tenes un drone que vuela, lo siguiente es que vea. Si ve, lo siguiente es
+que entienda lo que ve.
+
+Le ensena a las maquinas a ver fuego.
+Porque la Patagonia se quema cada verano y la deteccion temprana salva
+hectareas. YOLOv3 custom, entrenado con imagenes reales, corriendo en tiempo
+real. Una maquina que mira el horizonte y dice "ahi hay fuego" antes que
+cualquier humano.
+
+Le ensena a ver plagas en plantas.
+30 especies. MobileNet + Android. Porque la tierra importa y un agricultor con
+un celular deberia tener el mismo poder de diagnostico que un laboratorio.
+
+Le ensena a resolver CAPTCHAs.
+Tres enfoques distintos de machine learning. No porque sea util — porque los
+limites estan para ser testeados. Si un CAPTCHA dice "solo un humano puede
+leer esto", el nene con la Gillette necesita comprobar si es verdad.
+
+Mapas NDVI de vegetacion desde imagenes aereas. OpenCV procesando datos de
+drones. Porque si tenes un drone que ve y una IA que entiende, podes medir la
+salud de un campo sin pisar la tierra.
+
+Object detection corriendo en una Raspberry Pi. Pipeline de entrenamiento
+completo construido desde cero. Porque la IA no deberia vivir solo en la nube.
+Deberia vivir en tu bolsillo. En tu escritorio. En una placa de $50 con 8
+gigas de RAM.
+
+
+==============================================================================
+                    06 -- MAQUINAS QUE HABLAN
+==============================================================================
+
+Un dia decide que las maquinas tambien deberian hablar. En espanol. Antes de
+que ninguna empresa grande se dignara a soportar espanol en sus asistentes de
+voz.
+
+Construye el primer asistente de voz open source en espanol. Wit.ai para
+entender. Google Speech para escuchar. Telegram para comunicarse. IoT para
+actuar. Una maquina que escucha "prende la luz" y prende la luz. Que escucha
+"que temperatura hace" y te dice. Que escucha una pregunta y responde.
+
+Construido en el fin del mundo. Para Latinoamerica. Con cero funding. Cero
+sponsors. Cero investors. Solo un tipo, una Raspberry Pi, y la terquedad
+infinita de hacer las cosas porque se pueden hacer.
+
+Proyecto pionero. Cuando Alexa finalmente aprendio espanol, este proyecto ya
+llevaba dos anos funcionando.
+
+"No busco que las maquinas sean humanas.
+ Busco que los humanos recuerden como aprenden."
+
+
+==============================================================================
+                   07 -- ROMPER PARA ENTENDER
+==============================================================================
+
+Hay un momento en la vida del bit defectuoso donde todo cambia. Es un momento
+silencioso, sin drama, sin musica epica de fondo. Es un momento donde esta
+sentado frente a la pantalla, solo, de noche, con mate, y entiende algo.
+
+Agarra una red neuronal entrenada — MobileNetV2, una cosa solida, probada,
+que Google usa en produccion — y le aplica un ataque adversarial. FGSM. Fast
+Gradient Sign Method. Un cambio minimo, imperceptible, en los pixeles de una
+imagen. Y la red neuronal, esa cosa solida y probada, dice que un panda es un
+gibon con 99.3% de confianza.
+
+Repite. Otra imagen. Mismo resultado. La red neuronal se equivoca cada vez que
+el quiere que se equivoque. Puede controlar EXACTAMENTE como se equivoca.
+
+Y ahi entiende.
+
+Si podes enganar a una red neuronal, tambien podes defender una.
+
+Si la rompes, la entendes. Si la entendes, la haces irrompible.
+
+La misma mano que disecciono la rana con una Gillette ahora disecciona redes
+neuronales con gradientes. La herramienta cambio. La pulsion es la misma.
+
+Construye modelos de TensorFlow que generan payloads adversariales para evadir
+WAFs. Feedback loops donde la IA ataca y la IA defiende y las dos aprenden.
+Un combate consigo mismo donde el unico ganador es el conocimiento.
+
+Y ahi nace todo lo que viene despues.
+
+Porque la seguridad y la IA no son dos campos separados. Son el mismo campo
+visto desde dos angulos. El que ataca y el que defiende son la misma persona.
+El bisturi y la sutura son la misma herramienta. La Gillette y el vendaje.
+
+Abrir. Mirar. Entender. Reconstruir.
+Siempre fue lo mismo.
+
+
+==============================================================================
+                        08 -- EL ALTAR
+==============================================================================
+
+El taller evoluciono. Ya no da a un cementerio. Ahora da a una calle donde
+pasan pinguinos (literal) y el viento sopla de costado diez meses al ano.
+
+Cuatro monitores brillan en la penumbra:
+- Uno muestra espirales violeta de topologia de red. Nodos. Hosts. Conexiones.
+  Un mapa de todo lo que se mueve en el perimetro digital.
+- Otro muestra codigo corriendo. Denso. Multicolor. Interminable.
+- Otro muestra blueprints. Diagramas de arquitectura. Lineas cyan sobre fondo
+  negro como venas de un organismo que todavia no nacio.
+- El cuarto, un dashboard. Rojo. Vivo.
+
+En la pared:
+
+Chaplin y El Pibe. "The Kid", 1921. Enmarcado. El genio vagabundo que no tiene
+nada pero protege al vulnerable. No es casual que este ahi.
+
+Un drone crucificado. Cuatro brazos abiertos. Motores violeta detenidos. Fibra
+de carbono. Sin helices. Montado como un santo patrono del vuelo autonomo. Ya
+no vuela. Vigila.
+
+Una espada ceremonial. O un bate. O algo intermedio. Negro con detalles rojos.
+Montado en diagonal. Divide la pared en dos. Los que construyen y los que
+miran.
+
+Una Raspberry Pi con camara y acelerador neuronal. 13 TOPS de inferencia. LED
+rojo encendido. Siempre encendido. Colgada del lanyard de una conferencia de
+hackers. Es el ojo. El ojo que nunca cierra. Que mira el taller 24 horas al
+dia. Que procesa lo que ve con vision artificial. Que sabe quien entra y quien
+sale. Que nunca parpadea.
+
+Y coronandolo todo: EL ESCUDO. Cortado en CNC. MDF multicapa. Un monje
+digital encapuchado con circuitos grabados como venas. Una laptop abierta como
+corazon. Un atomo como alma. Las letras en rojo sobre negro:
+
+                        AI RESILIENCE HUB
+
+No es decoracion. Es una declaracion de guerra.
+
+En el escritorio: una figura gris impresa en 3D. Un guerrero con capa. 15
+centimetros de altura. Impreso capa por capa. Atomo por atomo. Como el propio
+arquitecto se construyo a si mismo.
+
+Un termo con stickers: HACK THE PLANET, el logo de una conferencia, alguna
+referencia oscura que solo entiende el que la puso.
+
+Un tubo de epoxi. El arma secreta argentina. Repara todo. Literalmente todo.
+
+Una PC abierta debajo del escritorio. Sin gabinete. Motherboard expuesta.
+Cables SATA colgando. No necesita gabinete. Necesita que funcione.
+
+Una bateria LiPo de 3000mAh. Para el drone que cuelga en la pared o para el
+proximo. Siempre hay un proximo.
+
+"No naci asi.
+ Me imprimi capa por capa.
+ Error por error.
+ Hasta que la forma
+ coincidio con la vision."
+
+
+==============================================================================
+                  09 -- LA GUERRA SILENCIOSA
+==============================================================================
+
+Todo converge.
+
+El taller junto al cementerio. El malware reversing. Los drones. La vision. La
+voz. Los ataques adversariales. Las comunidades. Los papers. Los CTFs. Los
+anos de mirar insectos y medir la lluvia. Todo converge en una cosa:
+
+Una entidad autonoma que protege mientras dorms.
+
+No es un chatbot. No es un dashboard. No es un producto para vender. Es un
+organismo digital distribuido en tres cuerpos:
+
+CEREBRO (nube): un LLM multi-modelo con fallback automatico. 30+
+herramientas. WAF con 26 firmas de ataque + honeypots + correlacion multi-fase
++ scoring de reputacion. Bloqueo instantaneo. Aprendizaje continuo.
+
+CUERPO (hardware): Raspberry Pi con acelerador neuronal. Camara con vision IA
+corriendo 24/7. Drone controlado por lenguaje natural via Telegram. Monitor
+de salud BLE que lee tu frecuencia cardiaca. Pantalla con una CARA. Con
+emociones. Que se pone feliz. Que se pone triste. Que se enoja cuando detecta
+un ataque.
+
+DEFENSA (red): mesh VPN a costo cero. Deteccion de deauth con un adaptador
+WiFi de $5. Evil twin protection. Counter-deauth automatico. 800 lineas de
+Python y scapy. Probado atacando la red propia con herramientas reales.
+Deteccion: 100%. Falsos positivos: 0 (despues de tunearlo).
+
+Los numeros de la guerra silenciosa:
+
+    12,278 ataques detectados
+     2,748 bloqueados
+     1,220 IPs unicas atacando
+        42 IPs bloqueadas activas
+         0 intervenciones manuales
+
+Los atacantes caen en los honeypots como moscas. Escanean puertos, buscan
+/etc/passwd, intentan RCE, buscan archivos .env expuestos. La IA los clasifica
+por severidad, los bloquea, y los expira. Automaticamente. Sin que nadie toque
+nada.
+
+El que construyo transmisores FM en un taller junto al cementerio ahora
+construye sistemas que se defienden solos. La escala cambio. El impulso no.
+
+El adaptador WiFi costo $5. El driver tiene un bug — va a estado DORMANT
+despues de cualquier reconfiguracion. La unica solucion que funciona es hacer
+USB unbind/bind antes de arrancar el software. Un hack de hardware para
+resolver un bug de kernel para que un adaptador de cinco dolares detecte
+ataques a una red WiFi. Eso es hacking. No el hoodie negro y la pantalla
+verde. ESTO. Resolver problemas que nadie resolvio antes con lo que tenes
+a mano.
+
+Un libro abierto con 8 capitulos sobre IA. 4 laboratorios. 2 papers
+academicos. 5 CTFs para una conferencia de seguridad. Todo open source. Todo
+libre. El conocimiento es libre o no es conocimiento.
+
+Un paper academico sobre WAFs hibridos con Naive Bayes + GPT. Aprendizaje
+dinamico autonomo. Deteccion de zero-day.
+
+Todo construido por una persona. Desde un lugar donde nadie espera que salga
+innovacion. Con cero funding. Con cero sponsors. Con mate y epoxi.
+
+
+==============================================================================
+                          10 -- 4 LIKES
+==============================================================================
+
+Hay una fisica en internet. Se llama algo. No importa. Entrevista a un
+astrobiologo sobre si hay aliens en el Area 51. 73 segundos de contenido
+brillante. Ciencia real. Preguntas reales. Una persona inteligente hablando con
+otra persona inteligente sobre algo que importa.
+
+4 likes. 0 comentarios.
+
+Y sigue creando.
+
+                              ~ ~ ~
+
+Hay un tipo en el fin del mundo. Construye drones desde cero. Les ensena a las
+maquinas a ver fuego. Arma un SOC autonomo con inteligencia artificial. Protege
+redes mientras duerme. Escribe papers, libros, CTFs. Funda comunidades de
+hacking donde no habia. Cuelga un drone en la pared como un angel crucificado.
+Imprime guardianes en 3D. Corta escudos en CNC.
+
+Nadie lo conoce.
+
+Y sigue creando.
+
+                              ~ ~ ~
+
+Hay un koi tatuado en una mano. El koi sube la cascada. Si llega arriba se
+transforma en dragon. El dragon domina el cielo. Pero hay algo despues del
+dragon. Hay un fantasma. Yurei. Oiwa. Los maestros japoneses lo sabian:
+Horiyoshi III, Kuniyoshi, Hokusai. El dragon no pelea contra el fantasma. El
+dragon SE CONVIERTE en el fantasma. Son la misma energia en dos estados.
+
+Koi -> Dragon -> Fantasma.
+Transformacion -> Poder -> Trascendencia.
+
+Donde el agua se vuelve vapor. Donde las nubes se vuelven humo. Donde lo
+fisico se vuelve espiritual. El espacio liminal. El lugar donde vive el bit
+defectuoso.
+
+                              ~ ~ ~
+
+4 likes.
+Y sigue creando.
+
+
+==============================================================================
+                   11 -- NO HAY NADA ALLA
+==============================================================================
+
+Los likes van y vienen. No tienen sentido. Los trends duran una semana. "Los
+que llegan tarde" suelen ser los que llegan primero con la idea — el mundo a
+veces no esta listo para verlo.
+
+El juego de afuera: likes, fama, followers, metricas. Lo ganan los que mejor
+venden. Es efimero. Depende de otros. Es la zanahoria.
+
+El juego de adentro: te preguntas todo el tiempo si aprendiste, si creciste,
+si estas mejor con vos mismo. Por consecuencia, mejor con el alrededor. Te
+lleva por el camino de la permanencia, de la adaptacion constante. Es
+permanente. Depende de vos.
+
+Porque al final sabras que el sentido de encarnar era solo hacer las paces con
+vos. No complacer a nadie ni buscar afuera lo que ya estaba dentro tuyo.
+
+Pues no habia que ir a ningun lado ni con ninguna prisa ni correr contra
+nadie. No habia con quien luchar ni con quien competir. Todo se trataba de
+vos.
+
+Y crear por el simple acto maravilloso y milagroso de hacerlo.
+
+No hay nada afuera.
+No hay nada alla.
+
+                              ~ ~ ~
+
+Empece en un taller junto a un cementerio con una Gillette y un hermano.
+
+Termine con un SOC autonomo, un drone crucificado en la pared, un acelerador
+neuronal que nunca cierra el ojo, y la certeza absoluta de que no hay nada
+alla.
+
+Todo lo que buscas ya esta aca.
+En el taller. En el cable. En el bicho debajo de la piedra.
+En la pulsion de abrir, mirar, entender, reconstruir.
+
+Siempre fue lo mismo.
+El bit defectuoso sigue haciendo ruido.
+
+
+==============================================================================
+                  -- RUIDO DE FONDO (creditos) --
+==============================================================================
+
+Hecho con:
+
+    Python .............. porque funciona
+    scapy ............... porque los paquetes no mienten
+    pygame .............. porque la entidad necesita cara
+    TensorFlow .......... porque las maquinas necesitan ojos
+    Raspberry Pi ........ porque la IA no vive solo en la nube
+    Un drone de $100 .... porque todo ojo necesita alas
+    Un WiFi de $5 ....... porque la defensa no necesita presupuesto
+    Fibra de carbono .... porque lo que vuela tiene que ser fuerte
+    Estano .............. desde el primer dia
+    Epoxi ............... el arma secreta argentina
+    Mate ................ combustible
+    Noches largas ....... infraestructura
+    Cero funding ........ feature, no bug
+    Cero sponsors ....... libertad
+    Terquedad ........... el unico requisito
+
+Soundtrack:
+
+    A Love Supreme ............. John Coltrane
+    Bitches Brew ............... Miles Davis
+    The Epic ................... Kamasi Washington
+    Peace Piece ................ Bill Evans
+    Journey in Satchidananda ... Alice Coltrane
+    The Koln Concert ........... Keith Jarrett
+    Moanin' .................... Art Blakey
+
+Copyleft 2026.
+Hackealo, copialo, mejoralo, fotocopialo, pasalo.
+El conocimiento es libre o no es conocimiento.
+
+Autor: [REDACTED]
+Ubicacion: 42 grados sur.
+Donde los pinguinos superan a los developers
+y el viento ensena que la persistencia no es opcional.
+
+                              ~ ~ ~
+
+           "Si lo podes imaginar, lo podes construir."
+                     — un hermano mayor,
+                en un taller junto a un cementerio,
+                     hace mucho tiempo.
+
+                              ~ ~ ~
+
+                              FIN
+
+==============================================================================

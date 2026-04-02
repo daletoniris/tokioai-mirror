@@ -323,40 +323,78 @@ def _generate_csv(
 
 # ── Unified Tool Entry Point ─────────────────────────────────────────────
 
-async def document_tool(action: str, params: Optional[Dict[str, Any]] = None) -> str:
+async def document_tool(
+    action: str,
+    title: Optional[str] = None,
+    content: Optional[str] = None,
+    sections: Optional[List[Dict[str, str]]] = None,
+    data: Optional[List[List[Any]]] = None,
+    headers: Optional[List[str]] = None,
+    output_path: Optional[str] = None,
+    template: Optional[str] = None,
+    params: Optional[Dict[str, Any]] = None,
+) -> str:
     """
     Document generation tool.
 
     Actions:
-      - generate_pdf: Create PDF report (params: title, sections[{heading, body}], output_path, template)
-      - generate_slides: Create PPTX (params: title, slides[{title, content, bullets}], output_path)
-      - generate_csv: Export CSV (params: data[[...]], headers[], output_path)
+      - generate_pdf: Create PDF report
+      - generate_slides: Create PPTX
+      - generate_csv: Export CSV
     """
-    params = params or {}
+    # Support legacy nested params format
+    if params and isinstance(params, dict):
+        title = title or params.get("title")
+        content = content or params.get("content") or params.get("body") or params.get("text")
+        sections = sections or params.get("sections")
+        data = data or params.get("data")
+        headers = headers or params.get("headers")
+        output_path = output_path or params.get("output_path")
+        template = template or params.get("template")
+
     action = (action or "").strip().lower()
+    title = str(title or "Reporte TokioAI").strip()
+    output_path = str(output_path or "").strip()
+    template = str(template or "default").strip()
 
     try:
         if action == "generate_pdf":
-            title = str(params.get("title", "Reporte TokioAI")).strip()
-            sections = params.get("sections", [])
-            if isinstance(sections, str):
-                sections = [{"heading": "Contenido", "body": sections}]
-            output_path = str(params.get("output_path", "")).strip()
-            template = str(params.get("template", "default")).strip()
-            return _generate_pdf(title, sections, output_path, template)
+            pdf_sections = []
+
+            # Normalize sections
+            if sections:
+                if isinstance(sections, str):
+                    pdf_sections = [{"heading": "", "body": sections}]
+                elif isinstance(sections, list):
+                    for s in sections:
+                        if isinstance(s, str):
+                            pdf_sections.append({"heading": "", "body": s})
+                        elif isinstance(s, dict):
+                            pdf_sections.append(s)
+
+            # Fallback: use content as single body
+            if not pdf_sections and content:
+                if isinstance(content, list):
+                    pdf_sections = [{"heading": "", "body": "\n".join(str(x) for x in content)}]
+                else:
+                    pdf_sections = [{"heading": "", "body": str(content)}]
+
+            if not pdf_sections:
+                return json.dumps({"ok": False, "error": (
+                    "PDF vacio: necesito 'content' (texto) o 'sections' (lista de {heading, body}). "
+                    "Ejemplo: document(action='generate_pdf', title='Mi Reporte', "
+                    "content='Clima: 20C\\nSalud: OK')"
+                )}, ensure_ascii=False)
+
+            logger.info(f"PDF: title={title!r}, sections={len(pdf_sections)}")
+            return _generate_pdf(title, pdf_sections, output_path, template)
 
         elif action == "generate_slides":
-            title = str(params.get("title", "Presentacion TokioAI")).strip()
-            slides = params.get("slides", [])
-            output_path = str(params.get("output_path", "")).strip()
-            template = str(params.get("template", "default")).strip()
+            slides = sections or []
             return _generate_slides(title, slides, output_path, template)
 
         elif action == "generate_csv":
-            data = params.get("data", [])
-            headers = params.get("headers")
-            output_path = str(params.get("output_path", "")).strip()
-            return _generate_csv(data, output_path, headers)
+            return _generate_csv(data or [], output_path, headers)
 
         return json.dumps({"ok": False, "error": f"Accion no soportada: {action}",
                           "supported": ["generate_pdf", "generate_slides", "generate_csv"]},

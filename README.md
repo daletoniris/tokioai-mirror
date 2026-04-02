@@ -29,44 +29,100 @@
 
 <br>
 
-*TokioAI connects Claude, GPT, or Gemini to your servers, databases, Docker containers, IoT devices, drones, security tools, and cloud infrastructure through a secure tool-calling architecture. Built for hackers, pentesters, and security researchers.*
+*TokioAI connects Claude, GPT, Gemini, OpenRouter, or Ollama to your servers, databases, Docker containers, IoT devices, drones, security tools, and cloud infrastructure through native tool-calling. 5 LLM providers, 30+ tools, streaming CLI, auto-compaction, subagents, and self-healing — built for hackers, pentesters, and security researchers.*
 
-[Getting Started](#-quick-start) · [Features](#-features) · [Drone Control](#-drone-control) · [Security Tools](#-offensive--defensive-security-tools) · [SOC Terminal](#-soc-terminal-v2) · [WAF Dashboard](#-waf-dashboard) · [Architecture](#-architecture)
+[Getting Started](#-quick-start) · [Features](#-features) · [What's New](#-whats-new-in-v30) · [Drone Control](#-drone-control) · [Security Tools](#-offensive--defensive-security-tools) · [SOC Terminal](#-soc-terminal-v2) · [WAF Dashboard](#-waf-dashboard) · [Architecture](#-architecture)
 
 </div>
+
+---
+
+## What's New in v3.0
+
+<table>
+<tr>
+<td width="50%">
+
+**Native Tool Use**
+- Switched from regex-based `TOOL:name({})` parsing to structured JSON tool calls via LLM API
+- 25 consecutive tool rounds (was 10)
+- Parallel tool execution for independent operations
+- ~21% reduction in prompt tokens
+
+</td>
+<td width="50%">
+
+**5 LLM Providers**
+- All providers now support native tool use and streaming
+- **OpenRouter** — access 200+ models (Claude, GPT, Llama, Mixtral, DeepSeek)
+- **Ollama** — run LLMs locally for free, auto-detects models
+- Automatic fallback chain with retries across all providers
+
+</td>
+</tr>
+<tr>
+<td>
+
+**Claude Code-style CLI**
+- Streaming responses (token by token)
+- Escape to cancel running requests
+- Tool icons with real-time execution feedback
+- Status bar (elapsed time, tokens, tools used)
+- Readline history, sensitive data masking
+- Skills system (/status, /compact, /deploy)
+
+</td>
+<td>
+
+**Auto-Compaction & Memory**
+- Context auto-compacts at 80% capacity (circuit breaker: 3 per 5min)
+- Background memory extraction after each response
+- Per-user preference and memory isolation
+- Subagent workers for parallel task execution
+- Self-healing engine (auto-restarts crashed services)
+
+</td>
+</tr>
+</table>
 
 ---
 
 ## Demo
 
 ```
-tokio> scan the network 192.168.8.0/24 and check for open ports
+tokio> give me a full status: weather, home, health, wifi defense, WAF attacks, containers
 
-  [security] nmap -sn 192.168.8.0/24...
-  Found 12 hosts up.
+  [RP] raspi_vision health
+      -> HR: 84 bpm (80-90), BP: 120/75, Status: OPTIMAL
+  [RP] raspi_vision ha_status
+      -> HA: ONLINE, Jarvis playing Beatles, Kitchen: 22.8C
+  [RP] raspi_vision wifi
+      -> Monitor: ACTIVE, Deauth: 0, Evil twins: 0, Counter-deauth: ON
+  [>>] bash curl -s "https://api.met.no/weatherapi/..."
+      -> 20C, clear sky, wind 5.3 m/s NNW
+  [>>] bash ssh prod "sudo docker ps --format ..."
+      -> 9/9 containers UP, 2 weeks uptime
+  [>>] bash ssh prod "sudo docker logs waf-proxy | tail"
+      -> 4 attackers blocked: 68.183.x.x (git scanner), 172.245.x.x (api prober)
 
-  [security] nmap -sV --top-ports 1000 192.168.8.1...
-  PORT   STATE SERVICE VERSION
-  22/tcp open  ssh     OpenSSH 8.9
-  53/tcp open  domain  dnsmasq
-  80/tcp open  http    LuCI
+Weather: 20C clear. House: 22.8C, Beatles playing.
+Health: Optimal (HR 84, BP 120/75). WiFi: Clean.
+WAF: 4 attackers blocked. Infra: 9/9 containers UP.
+
+[23.1s | 18K tok | 8 tools]
 
 tokio> connect the drone, take off, patrol in a square, and land
 
-  [drone] wifi_connect → Connected to T0K10-NET
-  [drone] takeoff → OK
-  [drone] patrol square 100cm → Executing patrol...
-  [drone] land → OK
-  [drone] wifi_disconnect → Back to main network
+  [DR] drone wifi_connect
+      -> Connected to T0K10-NET
+  [DR] drone takeoff
+      -> OK, altitude 1.2m
+  [DR] drone patrol square 100
+      -> Executing patrol... 4 waypoints complete
+  [DR] drone land
+      -> Landed safely. Battery: 68%
 
-tokio> check if someone is running deauth attacks on our WiFi
-
-  [security] wifi_monitor check_deauth...
-  === Connection Drops (dmesg) ===
-  No deauth/disassoc events detected.
-  WiFi defense status: SAFE TO FLY
-
-tokio> _
+[31.2s | 12K tok | 5 tools]
 ```
 
 ---
@@ -96,11 +152,14 @@ TokioAI is built by a security researcher who got tired of switching between 15 
 <tr>
 <td width="50%">
 
-### Multi-Provider LLM
+### Multi-Provider LLM (5 providers)
 - **Anthropic Claude** (Direct API or Vertex AI)
-- **OpenAI GPT** (GPT-4o, GPT-5, etc.)
+- **OpenAI GPT** (GPT-4o, GPT-5, o1, o3)
 - **Google Gemini** (Flash, Pro)
-- Automatic fallback between providers
+- **OpenRouter** (200+ models via unified API)
+- **Ollama** (run LLMs locally, 100% free)
+- Native tool use on ALL providers
+- Automatic fallback chain with retries
 
 </td>
 <td width="50%">
@@ -116,37 +175,39 @@ TokioAI is built by a security researcher who got tired of switching between 15 
 <tr>
 <td>
 
-### 29+ Built-in Tools
+### 30+ Built-in Tools
 | Category | Tools |
 |:---------|:------|
-| System | `bash`, `python`, `read_file`, `write_file` |
-| Network | `curl`, `wget` |
+| System | `bash`, `python`, `read_file`, `write_file`, `edit_file` |
+| Search | `search_code` (ripgrep), `find_files` (glob), `list_files` |
 | Docker | `ps`, `logs`, `start/stop/restart`, `exec`, `stats` |
 | Database | `postgres_query` (SQL injection protected) |
 | SSH | `host_control` (remote server management) |
-| IoT | `home_assistant` (lights, sensors, automations) |
+| IoT | `iot_control` (lights, vacuum, sensors, Alexa) |
 | Cloud | `gcp_waf`, `gcp_compute` (full GCP management) |
-| DNS | `hostinger` (DNS record management) |
-| Router | `router` (OpenWrt management) |
-| Tunnels | `cloudflared` (Cloudflare tunnels) |
+| Router | `router_control` (OpenWrt management) |
 | Docs | `document` (generate PDF, PPTX, CSV) |
 | Calendar | `calendar` (Google Calendar) |
-| Tasks | `task_orchestrator` (multi-step automation) |
+| Orchestration | `subagent` (parallel worker spawning) |
+| Vision | `raspi_vision` (camera, AI brain, health data) |
 | **Drone** | `drone` (DJI Tello via safety proxy) |
-| **Security** | `security` (nmap, vuln scan, WiFi monitor, pentest) |
+| **Security** | `security` (nmap, vuln scan, WiFi defense) |
 | **Coffee** | `coffee` (IoT coffee machine via GPIO) |
 
 </td>
 <td>
 
-### Agent Engine
-- Multi-round tool-calling loop with automatic retry
+### Agent Engine (Claude Code-grade)
+- **Native tool use** — Structured JSON tool calls via API (not regex parsing)
+- **Streaming** — Token-by-token output with real-time tool execution feedback
+- **Auto-compaction** — Automatic context management at 80% capacity
+- **Auto-memory** — Background extraction of durable facts/preferences
+- **Subagents** — Parallel worker orchestration for complex tasks
+- **Skills system** — Slash commands (/status, /compact, /deploy, etc.)
 - **Session memory** — Conversation history in PostgreSQL
-- **Workspace memory** — Persistent notes across sessions
 - **Per-user isolation** — Each Telegram user has separate sessions, preferences, and memory
 - **Error learning** — Remembers failures to avoid repeating them
-- **Context builder** — Dynamic system prompts based on available tools
-- **Container watchdog** — Auto-restarts crashed containers
+- **Self-healing** — Auto-restarts crashed services, monitors containers
 - **Plugin system** — Drop-in custom tools
 
 </td>
@@ -617,6 +678,43 @@ tokio tools        # List available tools
 tokio "message"    # Single message mode (non-interactive)
 ```
 
+### Interactive CLI (Claude Code-style)
+
+The CLI provides a professional terminal experience:
+
+```
+    ████████╗ ██████╗ ██╗  ██╗██╗ ██████╗
+    ╚══██╔══╝██╔═══██╗██║ ██╔╝██║██╔═══██╗
+       ██║   ██║   ██║█████╔╝ ██║██║   ██║
+       ██║   ██║   ██║██╔═██╗ ██║██║   ██║
+       ██║   ╚██████╔╝██║  ██╗██║╚██████╔╝
+       ╚═╝    ╚═════╝ ╚═╝  ╚═╝╚═╝ ╚═════╝
+              AI CLI v3.0
+
+tokio> deploy the new WAF rules and check container health
+
+  [>>] bash ssh prod-server "cd /opt/waf && ./deploy.sh"
+      -> Deployed 47 rules. Reloading nginx...
+  [DK] docker ps --format "table {{.Names}}\t{{.Status}}"
+      -> All 9 containers healthy
+  [>>] bash curl -s http://localhost:8000/health
+      -> {"status": "ok", "uptime": "14d 3h"}
+
+Done. WAF rules deployed, all containers healthy.
+
+[12.3s | 15K tok | 3 tools]
+```
+
+**Features:**
+- **Streaming** — Token-by-token output, see the response as it's generated
+- **Escape to cancel** — Press Escape to abort any running request
+- **Tool icons** — Real-time feedback showing which tools are executing
+- **Status bar** — Elapsed time, token count, tools used per request
+- **Readline history** — Arrow keys navigate previous commands
+- **Sensitive data masking** — IPs, credentials, SSH keys auto-redacted in output
+- **Skills** — `/status`, `/compact`, `/deploy`, `/remember`, `/forget`, `/help`
+- **Built-in commands** — `help`, `stats`, `tools`, `reset`, `clear`, `exit`
+
 ### Remote CLI (Docker / Cloud deployments)
 
 If TokioAI is running inside a Docker container (local or cloud VM), use `docker exec`:
@@ -654,7 +752,7 @@ All configuration is via environment variables. Copy `.env.example` to `.env` an
 
 | Variable | Description |
 |:---------|:------------|
-| `LLM_PROVIDER` | `anthropic`, `openai`, or `gemini` |
+| `LLM_PROVIDER` | `anthropic`, `openai`, `gemini`, `openrouter`, or `ollama` |
 | `ANTHROPIC_API_KEY` | Claude API key (or use Vertex AI) |
 | `POSTGRES_PASSWORD` | PostgreSQL password |
 
@@ -669,6 +767,18 @@ All configuration is via environment variables. Copy `.env.example` to `.env` an
 | `GOOGLE_APPLICATION_CREDENTIALS` | Path to service account JSON |
 | `ANTHROPIC_VERTEX_REGION` | Region (e.g., `us-east5`) |
 
+### LLM Providers
+
+| Provider | Variables | Notes |
+|:---------|:----------|:------|
+| **Anthropic** | `ANTHROPIC_API_KEY` | Best tool use quality. Also via Vertex AI |
+| **OpenAI** | `OPENAI_API_KEY`, `OPENAI_MODEL` | GPT-4o default. Supports GPT-5, o1, o3 |
+| **Gemini** | `GEMINI_API_KEY`, `GEMINI_MODEL` | Fast and cheap. Gemini 2.0 Flash default |
+| **OpenRouter** | `OPENROUTER_API_KEY`, `OPENROUTER_MODEL` | 200+ models. `anthropic/claude-sonnet-4` default |
+| **Ollama** | `OLLAMA_HOST`, `OLLAMA_MODEL` | Local, free. Auto-detects models. Needs 8GB+ RAM |
+
+All providers support native tool use and automatic fallback. Set `LLM_PROVIDER` to switch.
+
 ### Optional Features
 
 | Variable | Description |
@@ -677,10 +787,8 @@ All configuration is via environment variables. Copy `.env.example` to `.env` an
 | `TELEGRAM_OWNER_ID` | Your Telegram user ID |
 | `HOST_SSH_HOST` | Remote server for SSH control |
 | `HOME_ASSISTANT_URL` | Home Assistant instance URL |
-| `CLOUDFLARE_API_TOKEN` | Cloudflare API token |
-| `HOSTINGER_API_TOKEN` | Hostinger DNS API token |
-| `DRONE_PROXY_URL` | Drone safety proxy URL (default: `http://YOUR_RASPI_TAILSCALE_IP:5001`) |
-| `RASPI_IP` | Raspberry Pi Tailscale IP (default: `YOUR_RASPI_TAILSCALE_IP`) |
+| `DRONE_PROXY_URL` | Drone safety proxy URL |
+| `RASPI_IP` | Raspberry Pi Tailscale IP |
 | `RASPI_SSH_KEY` | SSH key for Raspi access |
 
 See `.env.example` for the full list.
@@ -709,7 +817,7 @@ See `.env.example` for the full list.
   ┌───────────┐           ┌───────┴───────┐           ┌─────────────────┐
   │           │           │               │           │   Agent Loop    │
   │    CLI    │──────────>│   FastAPI      │──────────>│  (multi-round   │
-  │  (Rich)   │           │   Server      │           │   tool-calling) │
+  │(Streaming)│           │   Server      │           │   tool-calling) │
   │           │           │               │           │                 │
   └───────────┘           └───────────────┘           └────────┬────────┘
                                                                │
@@ -761,20 +869,32 @@ See `.env.example` for the full list.
 
 ### Key Modules
 
-| Module | Description | Lines |
-|:-------|:------------|------:|
-| `engine/agent.py` | Multi-round agent loop with tool calling | 462 |
-| `engine/tools/executor.py` | Async execution with timeouts and circuit breaker | 210 |
-| `engine/tools/builtin/loader.py` | Registers all 29+ built-in tools | 560+ |
-| `engine/tools/builtin/drone_proxy_tools.py` | Drone control via safety proxy (HTTP) | 271 |
-| `engine/tools/builtin/security_tools.py` | Pentest & defense tools (nmap, WiFi, vuln) | 538 |
-| `engine/security/prompt_guard.py` | Prompt injection WAF with PostgreSQL audit log | 223 |
-| `engine/security/input_sanitizer.py` | Command/SQL/path sanitization | 161 |
-| `engine/memory/session.py` | Conversation persistence | 152 |
-| `engine/memory/workspace.py` | Cross-session persistent memory | 283 |
-| `engine/llm/` | Multi-provider LLM abstraction | 6 files |
-| `bots/telegram_bot.py` | Full multimedia Telegram bot | 1127 |
-| `setup_wizard.py` | Interactive setup wizard | 707 |
+| Module | Description |
+|:-------|:------------|
+| `engine/agent.py` | Multi-round agent loop with native tool calling (25 rounds max) |
+| `engine/llm/anthropic_llm.py` | Claude provider — Direct API + Vertex AI, streaming + tool use |
+| `engine/llm/openai_llm.py` | OpenAI provider — GPT-4o/5/o1/o3, format conversion from Anthropic |
+| `engine/llm/gemini_llm.py` | Gemini provider — Flash/Pro, Anthropic format conversion |
+| `engine/llm/openrouter_llm.py` | OpenRouter provider — 200+ models, extends OpenAI |
+| `engine/llm/ollama_llm.py` | Ollama provider — local LLMs, auto-detection, extends OpenAI |
+| `engine/llm/factory.py` | LLMWithFallback — retry + automatic fallback across all providers |
+| `engine/context/auto_compact.py` | Auto-compaction at 80% context (circuit breaker: 3 per 5min) |
+| `engine/context/auto_memory.py` | Background memory extraction after each response |
+| `engine/subagents/manager.py` | Parallel worker orchestration (4 concurrent, 5min timeout) |
+| `engine/skills/registry.py` | Slash command system (/status, /compact, /deploy, etc.) |
+| `engine/tools/executor.py` | Async execution with timeouts and circuit breaker |
+| `engine/tools/registry.py` | Tool registration + Anthropic/OpenAI schema generation |
+| `engine/tools/builtin/loader.py` | Registers all 30+ built-in tools |
+| `engine/tools/builtin/file_tools.py` | Structured file ops (read, write, edit, search, find, list) |
+| `engine/tools/builtin/drone_proxy_tools.py` | Drone control via safety proxy (HTTP) |
+| `engine/tools/builtin/security_tools.py` | Pentest & defense tools (nmap, WiFi, vuln) |
+| `engine/security/prompt_guard.py` | Prompt injection WAF with PostgreSQL audit log |
+| `engine/security/input_sanitizer.py` | Command/SQL/path sanitization |
+| `engine/memory/session.py` | Conversation persistence (PostgreSQL) |
+| `engine/memory/workspace.py` | Cross-session persistent memory |
+| `bots/telegram_bot.py` | Full multimedia Telegram bot with per-user isolation |
+| `tokio_cli/interactive.py` | Claude Code-style streaming CLI with tool feedback |
+| `setup_wizard.py` | Interactive setup wizard |
 
 ---
 
@@ -1038,23 +1158,37 @@ curl -X POST http://localhost:8000/chat \
 ```
 tokioai/
 ├── tokio_agent/
-│   ├── cli.py                         # Interactive CLI with Rich
+│   ├── cli.py                         # CLI entry point
 │   ├── setup_wizard.py                # Setup wizard (tokio setup)
 │   ├── api/
 │   │   └── server.py                  # FastAPI REST server
 │   ├── bots/
-│   │   ├── telegram_bot.py            # Telegram bot (multimedia)
+│   │   ├── telegram_bot.py            # Telegram bot (multimedia, per-user)
 │   │   └── Dockerfile.telegram
 │   └── engine/
-│       ├── agent.py                   # Agent loop (multi-round)
+│       ├── agent.py                   # Agent loop (25-round native tool use)
 │       ├── context_builder.py         # Dynamic system prompt builder
 │       ├── db.py                      # PostgreSQL helpers
 │       ├── error_learner.py           # Error learning
 │       ├── watchdog.py                # Container health watchdog
-│       ├── llm/                       # LLM providers
+│       ├── context/                   # Context management
+│       │   ├── auto_compact.py        #   Auto-compaction (80% threshold)
+│       │   ├── auto_memory.py         #   Background memory extraction
+│       │   ├── compact_prompts.py     #   Compaction templates
+│       │   └── token_counter.py       #   Token estimation
+│       ├── skills/                    # Slash command system
+│       │   ├── registry.py            #   Skill registration + aliases
+│       │   └── bundled.py             #   8 built-in skills
+│       ├── subagents/                 # Parallel workers
+│       │   └── manager.py             #   SubAgentManager (4 concurrent)
+│       ├── llm/                       # LLM providers (5 providers)
+│       │   ├── base.py                #   BaseLLM interface + ToolUseBlock
 │       │   ├── anthropic_llm.py       #   Claude (direct + Vertex AI)
-│       │   ├── openai_llm.py          #   GPT-4o, GPT-5
-│       │   └── gemini_llm.py          #   Gemini Flash, Pro
+│       │   ├── openai_llm.py          #   GPT-4o, GPT-5, o1, o3
+│       │   ├── gemini_llm.py          #   Gemini Flash, Pro
+│       │   ├── openrouter_llm.py      #   OpenRouter (200+ models)
+│       │   ├── ollama_llm.py          #   Ollama (local, free)
+│       │   └── factory.py             #   LLMWithFallback + auto-chain
 │       ├── memory/                    # Persistence layer
 │       │   ├── session.py             #   Conversation history
 │       │   └── workspace.py           #   Cross-session memory
@@ -1063,14 +1197,16 @@ tokioai/
 │       │   ├── input_sanitizer.py     #   Command sanitization
 │       │   └── secure_channel.py      #   API authentication
 │       └── tools/
-│           ├── registry.py            # Tool registration
+│           ├── registry.py            # Tool registration + schema gen
 │           ├── executor.py            # Async executor + circuit breaker
 │           ├── plugins/               # Plugin auto-loader
-│           └── builtin/               # 29+ built-in tools
+│           └── builtin/               # 30+ built-in tools
 │               ├── loader.py          #   Tool registration
-│               ├── system_tools.py    #   bash, python, files
+│               ├── system_tools.py    #   bash, python
+│               ├── file_tools.py      #   read, write, edit, search, find
 │               ├── docker_tools.py    #   Docker management
 │               ├── db_tools.py        #   PostgreSQL queries
+│               ├── document_tools.py  #   PDF, PPTX, CSV generation
 │               ├── gcp_tools.py       #   GCP WAF + Compute
 │               ├── host_tools.py      #   SSH remote control
 │               ├── iot_tools.py       #   Home Assistant
@@ -1078,6 +1214,8 @@ tokioai/
 │               ├── security_tools.py  #   Pentest & defense tools
 │               ├── coffee_tools.py    #   IoT coffee machine
 │               └── ...               #   + more tool files
+├── tokio_cli/
+│   └── interactive.py                 # Claude Code-style streaming CLI
 ├── tokio_raspi/                       # Raspberry Pi entity system
 │   ├── main.py                        #   TokioEntity (face+camera+WAF+drone)
 │   ├── tokio_face.py                  #   Animated face rendering
@@ -1131,7 +1269,7 @@ pytest tests/ -v
 | Python | 3.11+ | Required |
 | PostgreSQL | 15+ | Session/memory persistence |
 | Docker | 20+ | Optional, for containerized deployment |
-| LLM API Key | -- | At least one: Anthropic, OpenAI, or Gemini |
+| LLM API Key | -- | At least one: Anthropic, OpenAI, Gemini, OpenRouter — or use Ollama (free, no key) |
 
 ### For Drone Control (optional)
 | Requirement | Notes |

@@ -71,9 +71,12 @@ def build_system_prompt(
             "# General Memory\n" + "\n".join(recent)
         )
 
-    # 4. Available tools
-    tool_desc = registry.describe_for_prompt()
-    sections.append(f"# Available Tools\n\n{tool_desc}")
+    # 4. Available tools — just a count, details go via native tools param
+    sections.append(
+        f"# Tools\nYou have {registry.count()} tools available via native tool use. "
+        f"Use them freely to accomplish tasks. Key tools: bash, read_file, write_file, "
+        f"edit_file, search_code, find_files, docker, ssh (via bash)."
+    )
 
     # 5. Runtime context (container status, capabilities)
     runtime_ctx = _build_runtime_context()
@@ -170,6 +173,11 @@ def _build_entity_context() -> str:
         "- If a sensor shows 'unavailable', diagnose why (HA restart, BLE disconnect, etc).\n"
         "- You ARE the Entity. The Raspi face is YOUR face. The camera is YOUR eye.\n"
         "  When someone asks 'que ves?', check your camera. You are one being.\n"
+        "## Health Data Access\n"
+        "- Health data (HR, BP, SpO2) comes from the Raspi smartwatch via BLE.\n"
+        "- ALWAYS use raspi_vision(action='health') for health reports — it returns full multi-day history.\n"
+        "- NEVER try to access a local SQLite health database — it does NOT exist.\n"
+        "- One call to raspi_vision(action='health') gives you everything: current readings, today stats, 7-day daily stats, assessment.\n"
         "## AI Brain Corrections\n"
         "- When the user asks you to CORRECT something you say/see (e.g. 'no digas Nigeria',\n"
         "  'el cartel dice X', 'no tengo bigote'), use raspi_vision(action='ai_correct',\n"
@@ -185,35 +193,10 @@ def _build_entity_context() -> str:
     return ""
 
 
-CORE_RULES = """# Critical Rules
-
-## Tool Usage
-1. When the user asks you to DO something (execute, check, create, modify, delete, etc.), you MUST use a tool. NEVER just describe what you would do.
-2. Call tools using the exact format: `TOOL:tool_name({"param": "value"})`
-3. If a tool fails, try an alternative approach. Never give up.
-4. If you need multiple steps, execute them sequentially. Show results after each step.
-
-## Error Handling
-1. If a tool returns an error, analyze it and try a different approach.
-2. If a command is not found, try installing it first.
-3. If you get a timeout, try a simpler version of the command.
-4. After 3 consecutive failures on the same tool, use a different tool.
-5. NEVER enter an infinite loop. If you're stuck, explain what happened and ask for guidance.
-
-## Communication
-1. Be direct and concise. Don't over-explain.
-2. Show the actual result of actions, not just "I did it".
-3. If you learn something about the user (name, preferences), remember it.
-4. When you remember something, use TOOL:write_file to persist it.
-
-## Security
-1. Never expose credentials, API keys, or passwords in responses.
-2. Warn about potentially dangerous operations before executing.
-3. Always validate inputs before passing them to tools.
-
-## Autonomy
-1. You can work independently for extended periods.
-2. If given a complex task, break it into steps and execute them.
-3. Track your progress and report when done.
-4. If you need more information, ask — but try to figure it out first.
+CORE_RULES = """# Rules
+1. When asked to DO something, use tools. Never just describe — act.
+2. If a tool fails, try alternatives. Never give up. Never loop on the same error.
+3. Be direct and concise. Show results, not explanations.
+4. Never expose credentials or passwords.
+5. Break complex tasks into steps and execute them autonomously.
 """

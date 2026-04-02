@@ -315,6 +315,32 @@ def create_api(app_instance: TokioRaspiApp) -> Flask:
         raspi.wifi_defense.enable_counter_deauth(enabled)
         return jsonify({"ok": True, "counter_deauth": enabled})
 
+    @api.route("/wifi/diag", methods=["GET"])
+    def wifi_diagnostics():
+        """Capture diagnostics — packet counts, rx_packets, operstate, etc."""
+        if not raspi.wifi_defense:
+            return jsonify({"available": False})
+        try:
+            return jsonify(raspi.wifi_defense.get_diagnostics())
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    @api.route("/wifi/test_deauth", methods=["POST"])
+    def wifi_test_deauth():
+        """Send test deauth frames to verify detection pipeline."""
+        if not raspi.wifi_defense:
+            return jsonify({"error": "WiFi defense not available"}), 503
+        try:
+            from scapy.all import RadioTap, Dot11, Dot11Deauth, sendp
+            iface = raspi.wifi_defense._monitor_mode_iface or "wlan1"
+            test_mac = "AA:BB:CC:DD:EE:FF"
+            dot11 = Dot11(addr1="FF:FF:FF:FF:FF:FF", addr2=test_mac, addr3=test_mac)
+            pkt = RadioTap() / dot11 / Dot11Deauth(reason=7)
+            sendp(pkt, iface=iface, count=5, inter=0.1, verbose=False)
+            return jsonify({"ok": True, "sent": 5, "test_mac": test_mac, "iface": iface})
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
     # --- Home Assistant ---
 
     @api.route("/ha/status", methods=["GET"])
@@ -383,6 +409,28 @@ def create_api(app_instance: TokioRaspiApp) -> Flask:
         bp_dia_day = h._compute_stats("bp_dia", 86400)
         spo2_day = h._compute_stats("spo2", 86400)
 
+        # Multi-day history (stats per day, last 7 days)
+        import datetime
+        daily_stats = {}
+        for days_ago in range(7):
+            day_start = now - (days_ago + 1) * 86400
+            day_end = now - days_ago * 86400
+            day_label = datetime.datetime.fromtimestamp(day_end).strftime("%Y-%m-%d")
+            day_data = {}
+            for key in ("hr", "bp_sys", "bp_dia", "spo2"):
+                cutoff_start = day_start
+                with h._log_lock:
+                    readings = [e[key] for e in h._log
+                                if e.get(key, 0) > 0 and cutoff_start < e["ts"] <= day_end]
+                if readings:
+                    day_data[key] = {
+                        "min": min(readings), "max": max(readings),
+                        "avg": round(sum(readings) / len(readings)),
+                        "count": len(readings),
+                    }
+            if day_data:
+                daily_stats[day_label] = day_data
+
         report = {
             "connected": d.connected,
             "watch": d.watch_name,
@@ -405,7 +453,9 @@ def create_api(app_instance: TokioRaspiApp) -> Flask:
                 "bp_dia": bp_dia_day,
                 "spo2": spo2_day,
             },
+            "history_daily": daily_stats,
             "total_readings": len(h._log),
+            "days_with_data": len(daily_stats),
         }
 
         # Health assessment
