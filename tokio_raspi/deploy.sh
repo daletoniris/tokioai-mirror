@@ -2,8 +2,8 @@
 # Deploy TokioAI Raspi app to Raspberry Pi
 # Usage: ./deploy.sh [raspi-ip]
 
-RASPI_IP="${1:-192.168.8.161}"
-RASPI_USER="mrmoz"
+RASPI_IP="${1:?Usage: ./deploy.sh <raspi-ip>}"
+RASPI_USER="${RASPI_SSH_USER:-mrmoz}"
 SSH_KEY="$HOME/.ssh/id_rsa_raspberry"
 REMOTE_DIR="/home/mrmoz/tokio_raspi"
 

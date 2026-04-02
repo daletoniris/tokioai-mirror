@@ -35,7 +35,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Optional, Callable
 
-WATCH_ADDR = os.getenv("TOKIO_WATCH_ADDR", "D2:2E:68:90:39:01")
+WATCH_ADDR = os.getenv("TOKIO_WATCH_ADDR", "")
 WATCH_NAME = os.getenv("TOKIO_WATCH_NAME", "Nexus")
 
 # BLE handles (MoYoung V2 / MOY-D695)

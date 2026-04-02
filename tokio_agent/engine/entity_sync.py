@@ -24,7 +24,7 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-RASPI_API = os.getenv("RASPI_API_URL", "http://100.100.80.12:5000")
+RASPI_API = os.getenv("RASPI_API_URL", "")
 ENTITY_SYNC_ENABLED = os.getenv("ENTITY_SYNC_ENABLED", "true").lower() in ("true", "1", "yes")
 ENTITY_SYNC_TIMEOUT = float(os.getenv("ENTITY_SYNC_TIMEOUT", "5.0"))
 
@@ -97,9 +97,18 @@ def detect_emotion(text: str) -> str:
 # ── Session-to-user mapping ────────────────────────────────────
 
 _USER_NAMES = {
-    "5719110063": "Daniel",
-    "6263173554": "Sofi",
+    # Map Telegram user IDs to names via TOKIO_USER_MAP env var
+    # Format: "uid1:Name1,uid2:Name2"
 }
+
+def _load_user_map():
+    env = os.environ.get("TOKIO_USER_MAP", "")
+    for pair in env.split(","):
+        if ":" in pair:
+            uid, name = pair.strip().split(":", 1)
+            _USER_NAMES[uid.strip()] = name.strip()
+
+_load_user_map()
 
 
 def _get_user_name(session_id: str) -> str:

@@ -38,11 +38,13 @@ MAX_TOKENS = 8192
 SSH_RASPI = os.path.expanduser("~/.ssh/id_rsa_raspberry")
 SSH_GCP = os.path.expanduser("~/.ssh/google_compute_engine")
 
-# Hosts
-RASPI_IP = "192.168.8.161"
-RASPI_TS = "100.100.80.12"
-GCP_IP = "35.225.133.230"
-ROUTER_IP = "192.168.8.1"
+# Hosts — configure via env vars or .env file
+RASPI_IP = os.getenv("RASPI_IP", "")
+RASPI_TS = os.getenv("RASPI_TAILSCALE_IP", "")
+RASPI_USER = os.getenv("RASPI_SSH_USER", "mrmoz")
+GCP_IP = os.getenv("GCP_SSH_HOST", "")
+GCP_USER = os.getenv("GCP_SSH_USER", "osboxes")
+ROUTER_IP = os.getenv("ROUTER_IP", "")
 
 # History file
 HISTORY_FILE = os.path.expanduser("~/.tokio_ops_history")
@@ -53,39 +55,25 @@ You are concise, direct, and technical. You act like Claude Code but specialized
 
 ## Architecture
 
-### Raspberry Pi 5 (robot-Tokio-AI)
-- **SSH**: ssh -i ~/.ssh/id_rsa_raspberry mrmoz@192.168.8.161 (LAN) or mrmoz@100.100.80.12 (Tailscale)
-- **Entity UI**: runs as `python3 -m tokio_raspi --api` from /home/mrmoz/
-- **Code location**: /home/mrmoz/tokio_raspi/ (THIS is where entity runs, NOT tokioai-v2/)
-- **Also exists**: /home/mrmoz/tokioai-v2/tokio_raspi/ (git repo copy, NOT executed)
+Configure hosts via environment variables: RASPI_IP, RASPI_TAILSCALE_IP, GCP_SSH_HOST, ROUTER_IP.
+
+### Raspberry Pi 5
+- **SSH**: ssh -i ~/.ssh/id_rsa_raspberry user@$RASPI_IP (LAN) or user@$RASPI_TAILSCALE_IP (Tailscale)
+- **Entity UI**: runs as `python3 -m tokio_raspi --api`
 - **Entity API**: port 5000 (Flask)
 - **Drone proxy**: port 5001 (systemd: tokio-drone-proxy)
 - **Home Assistant**: Docker container, port 8123
 - **Hailo-8L**: AI accelerator for vision (/dev/hailo0)
-- **Camera**: /dev/video0 (USB)
-- **wlan1**: RTL8188EUS, monitor mode for WiFi defense
-- **BLE**: hci0, connects to health watch D2:2E:68:90:39:01
-- **Relaunch**: bash /tmp/relaunch.sh (must NOT kill drone proxy)
-- **Autostart**: ~/.config/labwc/autostart -> ~/tokio_autostart.sh
-- **Logs**: /tmp/tokio_entity.log
 
 ### GCP VM
-- **SSH**: ssh -i ~/.ssh/google_compute_engine osboxes@35.225.133.230
-- **TokioAI Agent**: Docker container tokio-agent (/opt/tokioai-v2/)
+- **SSH**: ssh -i ~/.ssh/google_compute_engine user@$GCP_SSH_HOST
+- **TokioAI Agent**: Docker container tokio-agent
 - **Telegram Bot**: Docker container tokio-telegram
 - **WAF Stack**: 7 containers (postgres, kafka, nginx, etc)
-- **Rebuild agent**: cd /opt/tokioai-v2 && sudo docker compose -f docker-compose.cloud.yml up -d --force-recreate tokio-cli
-- **Tools**: /opt/tokioai-v2/tokio_agent/engine/tools/builtin/ (bind mount, edit on disk)
-- **Env vars**: /opt/tokioai-v2/.env (docker compose restart does NOT reload env — must --force-recreate)
+- **Tools**: bind mount, edit on disk and restart container
 
-### Dev machine (this machine, 192.168.8.235)
-- **Repo**: /home/osboxes/tokioai-v2/
-- **Role**: Development, code sync, deployment
-- **Tailscale**: 100.79.121.13
-
-### Router GL.iNet
-- **IP**: 192.168.8.1
-- **SSH**: ssh root@192.168.8.1 (key on Raspi)
+### Router
+- **SSH**: ssh root@$ROUTER_IP
 
 ## Key Files
 - tokio_raspi/main.py — entity UI, all panels, face rendering, vision processing
@@ -138,7 +126,7 @@ Be direct. Act autonomously. Fix things. You ARE TokioAI's operations brain."""
 TOOLS = [
     {
         "name": "execute_local",
-        "description": "Execute a command on the local dev machine (192.168.8.235). Use for git, file ops, local builds.",
+        "description": "Execute a command on the local dev machine. Use for git, file ops, local builds.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -150,7 +138,7 @@ TOOLS = [
     },
     {
         "name": "execute_raspi",
-        "description": "Execute a command on the Raspberry Pi via SSH. Uses LAN (192.168.8.161), falls back to Tailscale.",
+        "description": "Execute a command on the Raspberry Pi via SSH. Uses LAN IP, falls back to Tailscale.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -174,7 +162,7 @@ TOOLS = [
     },
     {
         "name": "execute_router",
-        "description": "Execute a command on the GL.iNet router via SSH (192.168.8.1, root).",
+        "description": "Execute a command on the GL.iNet router via SSH (root).",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -304,15 +292,15 @@ def _ssh_cmd(host: str, key: str, user: str, cmd: str, timeout: int = 30) -> str
 
 def _raspi_cmd(cmd: str, timeout: int = 30) -> str:
     """Run command on Raspi — tries LAN first, then Tailscale."""
-    result = _ssh_cmd(RASPI_IP, SSH_RASPI, "mrmoz", cmd, timeout)
+    result = _ssh_cmd(RASPI_IP, SSH_RASPI, RASPI_USER, cmd, timeout)
     if "Connection refused" in result or "No route" in result or "Connection timed out" in result:
-        result = _ssh_cmd(RASPI_TS, SSH_RASPI, "mrmoz", cmd, timeout)
+        result = _ssh_cmd(RASPI_TS, SSH_RASPI, RASPI_USER, cmd, timeout)
     return result
 
 
 def _gcp_cmd(cmd: str, timeout: int = 30) -> str:
     """Run command on GCP."""
-    return _ssh_cmd(GCP_IP, SSH_GCP, "osboxes", cmd, timeout)
+    return _ssh_cmd(GCP_IP, SSH_GCP, GCP_USER, cmd, timeout)
 
 
 def execute_tool(name: str, input_data: dict) -> str:
@@ -360,7 +348,7 @@ def execute_tool(name: str, input_data: dict) -> str:
             tmp = f"/tmp/tokio_deploy_{int(time.time())}"
             with open(tmp, "w") as f:
                 f.write(content)
-            result = _run_cmd(f"scp -i {SSH_RASPI} {tmp} mrmoz@{RASPI_IP}:{remote_path}")
+            result = _run_cmd(f"scp -i {SSH_RASPI} {tmp} {RASPI_USER}@{RASPI_IP}:{remote_path}")
             os.unlink(tmp)
             return result or f"Written to raspi:{remote_path}"
         elif path.startswith("gcp:"):
@@ -368,7 +356,7 @@ def execute_tool(name: str, input_data: dict) -> str:
             tmp = f"/tmp/tokio_deploy_{int(time.time())}"
             with open(tmp, "w") as f:
                 f.write(content)
-            _run_cmd(f"scp -i {SSH_GCP} {tmp} osboxes@{GCP_IP}:/tmp/_deploy_tmp")
+            _run_cmd(f"scp -i {SSH_GCP} {tmp} {GCP_USER}@{GCP_IP}:/tmp/_deploy_tmp")
             result = _gcp_cmd(f"sudo cp /tmp/_deploy_tmp {remote_path}")
             os.unlink(tmp)
             return result or f"Written to gcp:{remote_path}"
@@ -455,8 +443,8 @@ def execute_tool(name: str, input_data: dict) -> str:
 
         if target in ("raspi", "both"):
             # Deploy to BOTH Raspi directories
-            _run_cmd(f"scp -i {SSH_RASPI} {local_path} mrmoz@{RASPI_IP}:/home/mrmoz/tokio_raspi/{filename}")
-            _run_cmd(f"scp -i {SSH_RASPI} {local_path} mrmoz@{RASPI_IP}:/home/mrmoz/tokioai-v2/tokio_raspi/{filename}")
+            _run_cmd(f"scp -i {SSH_RASPI} {local_path} {RASPI_USER}@{RASPI_IP}:/home/mrmoz/tokio_raspi/{filename}")
+            _run_cmd(f"scp -i {SSH_RASPI} {local_path} {RASPI_USER}@{RASPI_IP}:/home/mrmoz/tokioai-v2/tokio_raspi/{filename}")
             _raspi_cmd("rm -rf /home/mrmoz/tokio_raspi/__pycache__ /home/mrmoz/tokioai-v2/tokio_raspi/__pycache__")
             results.append(f"Raspi: deployed {filename}")
             if restart:
@@ -464,7 +452,7 @@ def execute_tool(name: str, input_data: dict) -> str:
                 results.append("Raspi: entity relaunched")
 
         if target in ("gcp", "both"):
-            _run_cmd(f"scp -i {SSH_GCP} {local_path} osboxes@{GCP_IP}:/tmp/{filename}")
+            _run_cmd(f"scp -i {SSH_GCP} {local_path} {GCP_USER}@{GCP_IP}:/tmp/{filename}")
             gcp_path = f"/opt/tokioai-v2/tokio_agent/engine/tools/builtin/{filename}"
             _gcp_cmd(f"sudo cp /tmp/{filename} {gcp_path}")
             results.append(f"GCP: deployed {filename}")

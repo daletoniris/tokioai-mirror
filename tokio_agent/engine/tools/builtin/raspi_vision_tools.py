@@ -13,7 +13,7 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-RASPI_API = os.getenv("RASPI_API_URL", "http://100.100.80.12:5000")
+RASPI_API = os.getenv("RASPI_API_URL", "")
 TIMEOUT = 10.0
 
 

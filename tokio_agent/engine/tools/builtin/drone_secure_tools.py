@@ -20,8 +20,8 @@ import httpx
 logger = logging.getLogger(__name__)
 
 # Raspi drone API via Tailscale (encrypted)
-DRONE_API = os.getenv("DRONE_API_URL", "http://100.100.80.12:5001")
-RASPI_API = os.getenv("RASPI_API_URL", "http://100.100.80.12:5000")
+DRONE_API = os.getenv("DRONE_API_URL", "")
+RASPI_API = os.getenv("RASPI_API_URL", "")
 TIMEOUT = 15.0
 
 

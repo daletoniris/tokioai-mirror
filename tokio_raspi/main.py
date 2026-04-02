@@ -139,7 +139,7 @@ def count_persons_precise(detections, known_faces_count: int = 0,
 # ---------------------------------------------------------------------------
 # Core Push — notify GCP brain of events (fire-and-forget in thread)
 # ---------------------------------------------------------------------------
-CORE_API_URL = os.getenv("TOKIO_CORE_API", "")  # e.g. http://100.125.151.118:8000
+CORE_API_URL = os.getenv("TOKIO_CORE_API", "")  # e.g. http://your-server:8000
 
 
 def _push_to_core(endpoint: str, data: dict):

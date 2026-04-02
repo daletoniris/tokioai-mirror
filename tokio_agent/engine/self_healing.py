@@ -25,9 +25,9 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-RASPI_API = os.getenv("RASPI_API_URL", "http://100.100.80.12:5000")
-DRONE_PROXY = os.getenv("DRONE_PROXY_URL", "http://100.100.80.12:5001")
-RASPI_SSH_HOST = os.getenv("HOST_SSH_HOST", "100.100.80.12")
+RASPI_API = os.getenv("RASPI_API_URL", "")
+DRONE_PROXY = os.getenv("DRONE_PROXY_URL", "")
+RASPI_SSH_HOST = os.getenv("HOST_SSH_HOST", "")
 RASPI_SSH_USER = os.getenv("HOST_SSH_USER", "mrmoz")
 RASPI_SSH_KEY = os.getenv("HOST_SSH_KEY_PATH", "/root/.ssh/id_ed25519_tokio_host")
 CHECK_INTERVAL = int(os.getenv("SELF_HEAL_INTERVAL", "30"))  # seconds

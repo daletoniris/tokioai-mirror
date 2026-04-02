@@ -237,14 +237,9 @@ SAFETY_PRESETS = {
 AUTHORIZED_IPS = {
     "127.0.0.1",            # localhost
     "::1",                  # localhost ipv6
-    "100.100.80.12",        # this Raspi (Tailscale)
-    "100.125.151.118",      # GCP TokioAI (Tailscale)
-    "100.79.121.13",        # Dev machine (Tailscale)
-    "100.64.237.35",        # Subnet router (Tailscale)
-    "192.168.8.161",        # Raspi LAN
-    "192.168.8.235",        # Dev machine LAN
 }
-# Additional IPs from env
+# Add your Tailscale/LAN IPs via env var (comma-separated)
+# Example: DRONE_AUTHORIZED_IPS=10.0.0.1,10.0.0.2,192.168.1.100
 _extra = os.getenv("DRONE_AUTHORIZED_IPS", "")
 AUTHORIZED_IPS |= {ip.strip() for ip in _extra.split(",") if ip.strip()}
 
