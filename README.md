@@ -131,14 +131,14 @@ tokio> connect the drone, take off, patrol in a square, and land
 <tr>
 <td width="50%" align="center">
 
-<video src="https://raw.githubusercontent.com/TokioAI/tokioai-v1.8/main/demo/tokioai-demo-1.mp4" controls width="100%"></video>
+<video src="https://raw.githubusercontent.com/TokioAI/tokioai-v1.8/master/demo/tokioai-demo-1.mp4" controls width="100%"></video>
 
 **Demo 1** — TokioAI in action
 
 </td>
 <td width="50%" align="center">
 
-<video src="https://raw.githubusercontent.com/TokioAI/tokioai-v1.8/main/demo/tokioai-demo-2.mp4" controls width="100%"></video>
+<video src="https://raw.githubusercontent.com/TokioAI/tokioai-v1.8/master/demo/tokioai-demo-2.mp4" controls width="100%"></video>
 
 **Demo 2** — TokioAI in action
 
