@@ -69,6 +69,29 @@ tokio> chequea si alguien esta haciendo ataques deauth en el WiFi
 tokio> _
 ```
 
+### 🎬 Video Demos
+
+<table>
+<tr>
+<td width="50%" align="center">
+
+https://github.com/TokioAI/tokioai-v1.8/raw/main/demos/tokioai-demo-1.mp4
+
+**Demo 1** — TokioAI en acción
+
+</td>
+<td width="50%" align="center">
+
+https://github.com/TokioAI/tokioai-v1.8/raw/main/demos/tokioai-demo-2.mp4
+
+**Demo 2** — TokioAI en acción
+
+</td>
+</tr>
+</table>
+
+> *Videos en el directorio [`demos/`](demos/).*
+
 ---
 
 ## Filosofia

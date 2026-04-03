@@ -125,6 +125,29 @@ tokio> connect the drone, take off, patrol in a square, and land
 [31.2s | 12K tok | 5 tools]
 ```
 
+### 🎬 Video Demos
+
+<table>
+<tr>
+<td width="50%" align="center">
+
+https://github.com/TokioAI/tokioai-v1.8/raw/main/demos/tokioai-demo-1.mp4
+
+**Demo 1** — TokioAI in action
+
+</td>
+<td width="50%" align="center">
+
+https://github.com/TokioAI/tokioai-v1.8/raw/main/demos/tokioai-demo-2.mp4
+
+**Demo 2** — TokioAI in action
+
+</td>
+</tr>
+</table>
+
+> *Videos located in [`demos/`](demos/) directory.*
+
 ---
 
 ## Philosophy
