@@ -75,14 +75,14 @@ tokio> _
 <tr>
 <td width="50%" align="center">
 
-https://github.com/TokioAI/tokioai-v1.8/raw/main/demos/tokioai-demo-1.mp4
+<video src="https://raw.githubusercontent.com/TokioAI/tokioai-v1.8/main/demo/tokioai-demo-1.mp4" controls width="100%"></video>
 
 **Demo 1** — TokioAI en acción
 
 </td>
 <td width="50%" align="center">
 
-https://github.com/TokioAI/tokioai-v1.8/raw/main/demos/tokioai-demo-2.mp4
+<video src="https://raw.githubusercontent.com/TokioAI/tokioai-v1.8/main/demo/tokioai-demo-2.mp4" controls width="100%"></video>
 
 **Demo 2** — TokioAI en acción
 
@@ -90,7 +90,7 @@ https://github.com/TokioAI/tokioai-v1.8/raw/main/demos/tokioai-demo-2.mp4
 </tr>
 </table>
 
-> *Videos en el directorio [`demos/`](demos/).*
+> *Videos en el directorio [`demo/`](demo/).*
 
 ---
 
