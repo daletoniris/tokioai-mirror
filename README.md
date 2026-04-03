@@ -45,7 +45,7 @@
 
 **Native Tool Use**
 - Switched from regex-based `TOOL:name({})` parsing to structured JSON tool calls via LLM API
-- 25 consecutive tool rounds (was 10)
+- Configurable rounds (25 default, 0 = unlimited)
 - Parallel tool execution for independent operations
 - ~21% reduction in prompt tokens
 
@@ -65,11 +65,11 @@
 
 **Claude Code-style CLI**
 - Streaming responses (token by token)
+- **Unlimited mode** — no round or time limits (`--unlimited`)
+- **Persistent mode** — keeps working until you say "stop" (`--persistent`)
 - Escape to cancel running requests
 - Tool icons with real-time execution feedback
-- Status bar (elapsed time, tokens, tools used)
-- Readline history, sensitive data masking
-- Skills system (/status, /compact, /deploy)
+- Status bar, readline history, sensitive data masking
 
 </td>
 <td>
@@ -713,7 +713,37 @@ Done. WAF rules deployed, all containers healthy.
 - **Readline history** — Arrow keys navigate previous commands
 - **Sensitive data masking** — IPs, credentials, SSH keys auto-redacted in output
 - **Skills** — `/status`, `/compact`, `/deploy`, `/remember`, `/forget`, `/help`
-- **Built-in commands** — `help`, `stats`, `tools`, `reset`, `clear`, `exit`
+- **Built-in commands** — `help`, `stats`, `tools`, `reset`, `clear`, `exit`, `unlimited`, `persistent`, `stop`
+
+### Execution Modes
+
+| Mode | Flag | Description |
+|:-----|:-----|:------------|
+| **Normal** | *(default)* | 25 tool rounds max, 10 min timeout per message |
+| **Unlimited** | `--unlimited` or `-u` | No round or time limits — runs until the task is done |
+| **Persistent** | `--persistent` or `-p` | Unlimited + keeps iterating after each response until you say "stop" |
+| **Custom** | `--max-rounds N` | Set a specific round limit (0 = unlimited) |
+
+```bash
+# Normal mode (default)
+python3 -m tokio_cli
+
+# Unlimited — let Tokio work as long as it needs
+python3 -m tokio_cli --unlimited
+
+# Persistent — Tokio keeps working until you tell it to stop
+python3 -m tokio_cli --persistent
+
+# Custom limits
+python3 -m tokio_cli --max-rounds 100 --max-time 1800
+```
+
+**Persistent mode** is designed for long-running tasks: coding sessions, monitoring, refactoring, or any job where you want Tokio to keep going autonomously. After each response, Tokio asks for input — press Enter to let it continue, type instructions to redirect, or type `stop` to end the session.
+
+You can also toggle modes at runtime without restarting:
+- Type `unlimited` to toggle unlimited mode on/off
+- Type `persistent` to toggle persistent mode on/off
+- Type `stop` to exit persistent mode
 
 ### Remote CLI (Docker / Cloud deployments)
 
