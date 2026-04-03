@@ -54,8 +54,8 @@ TOOL_CALL_SIMPLE_RE = re.compile(
 class TokioAgent:
     """The main autonomous agent."""
 
-    MAX_TOOL_ROUNDS = 25  # Max consecutive tool-use rounds per message
-    MAX_TOTAL_TIME = 600  # Max 10 minutes per message
+    MAX_TOOL_ROUNDS = 25  # Max consecutive tool-use rounds per message (0 = unlimited)
+    MAX_TOTAL_TIME = 600  # Max seconds per message (0 = unlimited)
 
     def __init__(
         self,
@@ -246,10 +246,11 @@ class TokioAgent:
         # ── Think → Act → Observe → Learn loop (native tool use) ──
         final_response = ""
 
-        for round_num in range(self.MAX_TOOL_ROUNDS):
+        max_rounds = self.MAX_TOOL_ROUNDS or 999999
+        for round_num in range(max_rounds):
             elapsed = time.monotonic() - start_time
-            if elapsed > self.MAX_TOTAL_TIME:
-                final_response = "⏱️ Tiempo máximo alcanzado."
+            if self.MAX_TOTAL_TIME and elapsed > self.MAX_TOTAL_TIME:
+                final_response = "Tiempo maximo alcanzado."
                 break
 
             if self._on_thinking:
@@ -353,7 +354,7 @@ class TokioAgent:
                 final_response = response.text
 
         else:
-            final_response = final_response or "Máximo de iteraciones alcanzado."
+            final_response = final_response or "Maximo de iteraciones alcanzado. Usa --max-rounds 0 para modo ilimitado."
 
         clean_response = final_response.strip()
 
@@ -767,14 +768,15 @@ class TokioAgent:
         # ── Native tool use loop with streaming ──
         final_response = ""
 
-        for round_num in range(self.MAX_TOOL_ROUNDS):
+        max_rounds = self.MAX_TOOL_ROUNDS or 999999
+        for round_num in range(max_rounds):
             if cancel_event and cancel_event.is_set():
-                final_response = "⛔ Cancelado."
+                final_response = "Cancelado."
                 break
 
             elapsed = time.monotonic() - start_time
-            if elapsed > self.MAX_TOTAL_TIME:
-                final_response = "⏱️ Tiempo máximo alcanzado."
+            if self.MAX_TOTAL_TIME and elapsed > self.MAX_TOTAL_TIME:
+                final_response = "Tiempo maximo alcanzado."
                 break
 
             yield ("thinking", round_num + 1)
@@ -877,7 +879,7 @@ class TokioAgent:
                 return
 
         else:
-            final_response = final_response or "Máximo de iteraciones alcanzado."
+            final_response = final_response or "Maximo de iteraciones alcanzado. Usa --max-rounds 0 para modo ilimitado."
 
         clean_response = final_response.strip()
         self.session_manager.add_message(session_id, "assistant", clean_response)

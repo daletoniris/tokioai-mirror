@@ -13,6 +13,9 @@ Usage:
     python3 -m tokio_cli                    # interactive mode
     python3 -m tokio_cli "fix the bug"      # single command
     python3 -m tokio_cli --session mysession # resume session
+    python3 -m tokio_cli --unlimited        # no round/time limits
+    python3 -m tokio_cli --persistent       # keeps working until 'stop'
+    python3 -m tokio_cli --max-rounds 100   # custom round limit
 """
 from __future__ import annotations
 
@@ -237,6 +240,8 @@ def show_help(agent):
   {C_CYAN}stats{C_RESET}           Estadisticas
   {C_CYAN}tools{C_RESET}           Herramientas
   {C_CYAN}clear{C_RESET}           Limpiar pantalla
+  {C_CYAN}unlimited{C_RESET}       Toggle modo ilimitado (rounds + tiempo)
+  {C_CYAN}persistent{C_RESET}      Toggle modo persistente (sigue hasta que digas 'stop')
 
 {C_BOLD}Atajos:{C_RESET}
   {C_CYAN}Escape{C_RESET}          Cancelar request actual
@@ -373,8 +378,16 @@ async def process_streaming(agent, user_input: str, session_id: str):
 
 # ─── Main Loop ───────────────────────────────────────
 
-async def run_interactive(session_id: Optional[str] = None):
+async def run_interactive(session_id: Optional[str] = None, max_rounds: int = 25,
+                          max_time: int = 600, persistent: bool = False):
     """Run the interactive CLI loop."""
+
+    mode_parts = ["Streaming", "Native Tools", "Auto-compact", "Skills"]
+    if max_rounds == 0:
+        mode_parts.append("Unlimited")
+    if persistent:
+        mode_parts.append("Persistent")
+
     print(f"""
 {C_MAGENTA}    ████████╗ ██████╗ ██╗  ██╗██╗ ██████╗
     ╚══██╔══╝██╔═══██╗██║ ██╔╝██║██╔═══██╗
@@ -383,13 +396,23 @@ async def run_interactive(session_id: Optional[str] = None):
        ██║   ╚██████╔╝██║  ██╗██║╚██████╔╝
        ╚═╝    ╚═════╝ ╚═╝  ╚═╝╚═╝ ╚═════╝{C_RESET}
 {C_BOLD}{C_WHITE}              AI CLI v3.0{C_RESET}
-{C_DIM}  Streaming | Native Tools | Auto-compact | Skills
+{C_DIM}  {' | '.join(mode_parts)}
   Escape cancela. 'help' para comandos.{C_RESET}
 """)
 
     _load_history()
     agent = create_agent()
     sid = session_id or "cli-interactive"
+
+    # Apply limits
+    agent.MAX_TOOL_ROUNDS = max_rounds
+    agent.MAX_TOTAL_TIME = max_time
+    _persistent_mode = persistent
+
+    if max_rounds == 0:
+        print(f"  {C_YELLOW}Modo ilimitado: sin limite de rounds ni tiempo{C_RESET}")
+    if _persistent_mode:
+        print(f"  {C_YELLOW}Modo persistente: seguira trabajando hasta que escribas 'stop'{C_RESET}")
 
     while True:
         try:
@@ -415,10 +438,41 @@ async def run_interactive(session_id: Optional[str] = None):
             sid = f"cli-{int(time.time())}"
             print(f"{C_DIM}Sesion reiniciada: {sid}{C_RESET}")
             continue
+        if lower == "unlimited":
+            if agent.MAX_TOOL_ROUNDS == 0:
+                agent.MAX_TOOL_ROUNDS = 25
+                agent.MAX_TOTAL_TIME = 600
+                print(f"  {C_GREEN}Modo normal: 25 rounds, 10min max{C_RESET}")
+            else:
+                agent.MAX_TOOL_ROUNDS = 0
+                agent.MAX_TOTAL_TIME = 0
+                print(f"  {C_YELLOW}Modo ilimitado: sin limite de rounds ni tiempo{C_RESET}")
+            continue
+        if lower == "persistent":
+            _persistent_mode = not _persistent_mode
+            if _persistent_mode:
+                agent.MAX_TOOL_ROUNDS = 0
+                agent.MAX_TOTAL_TIME = 0
+                print(f"  {C_YELLOW}Modo persistente ON: seguira trabajando hasta que escribas 'stop'{C_RESET}")
+                print(f"  {C_DIM}  Tokio procesara tu mensaje y seguira iterando.{C_RESET}")
+                print(f"  {C_DIM}  Escribe 'stop' en cualquier momento para que termine.{C_RESET}")
+            else:
+                agent.MAX_TOOL_ROUNDS = 25
+                agent.MAX_TOTAL_TIME = 600
+                print(f"  {C_GREEN}Modo persistente OFF: volvio a 25 rounds, 10min max{C_RESET}")
+            continue
+        if lower == "stop" and _persistent_mode:
+            _persistent_mode = False
+            agent.MAX_TOOL_ROUNDS = 25
+            agent.MAX_TOTAL_TIME = 600
+            print(f"  {C_GREEN}Detenido. Modo normal: 25 rounds, 10min max{C_RESET}")
+            continue
         if lower == "stats":
             stats = agent.get_stats()
+            mode = "UNLIMITED" if agent.MAX_TOOL_ROUNDS == 0 else f"{agent.MAX_TOOL_ROUNDS} rounds"
             print(f"\n{C_BOLD}Stats:{C_RESET}")
             print(f"  LLM: {stats.get('llm', '?')}")
+            print(f"  Modo: {mode}{' + PERSISTENT' if _persistent_mode else ''}")
             print(f"  Tools: {stats.get('tools_count', 0)}")
             print(f"  Mensajes: {stats.get('messages_processed', 0)}")
             print(f"  Tools ejecutadas: {stats.get('tools_executed', 0)}")
@@ -439,6 +493,27 @@ async def run_interactive(session_id: Optional[str] = None):
 
         # Process with streaming
         await process_streaming(agent, user_input, sid)
+
+        # Persistent mode: keep going until user says stop
+        if _persistent_mode:
+            while _persistent_mode:
+                try:
+                    follow_up = input(f"\n{C_DIM}[persistent] tokio>{C_RESET} ").strip()
+                except (EOFError, KeyboardInterrupt):
+                    _persistent_mode = False
+                    print(f"\n{C_GREEN}Modo persistente detenido.{C_RESET}")
+                    break
+                if not follow_up:
+                    # Empty input = let Tokio continue on its own
+                    follow_up = "Continua con la tarea. Si terminaste, dime que esta listo."
+                if follow_up.lower() in ("stop", "parar", "detener", "exit"):
+                    _persistent_mode = False
+                    agent.MAX_TOOL_ROUNDS = 25
+                    agent.MAX_TOTAL_TIME = 600
+                    print(f"  {C_GREEN}Modo persistente detenido. Volvio a 25 rounds.{C_RESET}")
+                    break
+                _save_history()
+                await process_streaming(agent, follow_up, sid)
 
     _save_history()
 
@@ -462,6 +537,14 @@ def main():
     parser.add_argument("query", nargs="*", help="Query to run (omit for interactive mode)")
     parser.add_argument("--session", "-s", default=None, help="Session ID")
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose logging")
+    parser.add_argument("--max-rounds", type=int, default=25,
+                        help="Max tool rounds per message (0 = unlimited, default: 25)")
+    parser.add_argument("--max-time", type=int, default=600,
+                        help="Max seconds per message (0 = unlimited, default: 600)")
+    parser.add_argument("--unlimited", "-u", action="store_true",
+                        help="No limits on rounds or time")
+    parser.add_argument("--persistent", "-p", action="store_true",
+                        help="Persistent mode: keeps working until you say 'stop'")
 
     args = parser.parse_args()
 
@@ -470,11 +553,21 @@ def main():
     else:
         logging.basicConfig(level=logging.WARNING)
 
-    if args.query:
-        query = " ".join(args.query)
-        asyncio.run(run_single(query, args.session))
-    else:
-        asyncio.run(run_interactive(args.session))
+    max_rounds = 0 if args.unlimited else args.max_rounds
+    max_time = 0 if args.unlimited else args.max_time
+    persistent = args.persistent
+    if persistent:
+        max_rounds = 0
+        max_time = 0
+
+    try:
+        if args.query:
+            query = " ".join(args.query)
+            asyncio.run(run_single(query, args.session))
+        else:
+            asyncio.run(run_interactive(args.session, max_rounds, max_time, persistent))
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        pass
 
 
 if __name__ == "__main__":
