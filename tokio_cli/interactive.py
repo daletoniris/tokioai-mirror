@@ -46,9 +46,10 @@ C_CYAN = "\033[36m"
 C_WHITE = "\033[37m"
 C_CLEAR_LINE = "\033[2K\033[G"
 
-# ─── History ─────────────────────────────────────────
+# ─── History & Session Persistence ───────────────────
 
 HISTORY_FILE = os.path.expanduser("~/.tokio_cli_history")
+SESSION_FILE = os.path.expanduser("~/.tokio_cli_session.json")
 
 
 def _load_history():
@@ -65,6 +66,43 @@ def _save_history():
         readline.write_history_file(HISTORY_FILE)
     except Exception:
         pass
+
+
+def _save_session_state(sid: str, last_messages: list):
+    """Save session state to disk so it persists across CLI restarts."""
+    import json
+    try:
+        # Keep last 20 messages as context summary
+        recent = last_messages[-20:] if last_messages else []
+        state = {
+            "session_id": sid,
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "messages": recent,
+        }
+        with open(SESSION_FILE, "w") as f:
+            json.dump(state, f, indent=2, ensure_ascii=False)
+    except Exception:
+        pass
+
+
+def _load_session_state():
+    """Load previous session state from disk."""
+    import json
+    try:
+        if os.path.exists(SESSION_FILE):
+            with open(SESSION_FILE, "r") as f:
+                state = json.load(f)
+            # Check if session is less than 7 days old
+            ts = state.get("timestamp", "")
+            if ts:
+                from datetime import datetime, timedelta
+                saved = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
+                if datetime.now() - saved > timedelta(days=7):
+                    return None  # Too old, start fresh
+            return state
+    except Exception:
+        pass
+    return None
 
 
 # ─── Spinner ─────────────────────────────────────────
@@ -402,7 +440,39 @@ async def run_interactive(session_id: Optional[str] = None, max_rounds: int = 25
 
     _load_history()
     agent = create_agent()
-    sid = session_id or "cli-interactive"
+
+    # Session resumption
+    sid = session_id
+    resumed = False
+    if not sid:
+        prev = _load_session_state()
+        if prev and prev.get("messages"):
+            prev_sid = prev["session_id"]
+            prev_ts = prev.get("timestamp", "?")
+            prev_msgs = prev["messages"]
+            # Show last few messages as context
+            print(f"  {C_YELLOW}Sesion anterior encontrada ({prev_ts}):{C_RESET}")
+            for msg in prev_msgs[-4:]:
+                role = msg.get("role", "?")
+                content = msg.get("content", "")[:100]
+                icon = ">" if role == "user" else "<"
+                print(f"    {C_DIM}{icon} {content}{'...' if len(msg.get('content', '')) > 100 else ''}{C_RESET}")
+            print(f"  {C_DIM}Enter = continuar | 'new' = nueva sesion{C_RESET}")
+            try:
+                choice = input(f"  ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                choice = ""
+            if choice not in ("new", "nueva", "n"):
+                sid = prev_sid
+                resumed = True
+                # Re-inject previous messages into the session
+                for msg in prev_msgs:
+                    agent.session_manager.add_message(sid, msg["role"], msg["content"])
+                print(f"  {C_GREEN}Sesion restaurada: {sid}{C_RESET}\n")
+            else:
+                print(f"  {C_DIM}Nueva sesion.{C_RESET}\n")
+        if not sid:
+            sid = f"cli-{int(time.time())}"
 
     # Apply limits
     agent.MAX_TOOL_ROUNDS = max_rounds
@@ -493,6 +563,11 @@ async def run_interactive(session_id: Optional[str] = None, max_rounds: int = 25
 
         # Process with streaming
         await process_streaming(agent, user_input, sid)
+
+        # Save session state after each interaction
+        session = agent.session_manager.get_session(sid)
+        if session:
+            _save_session_state(sid, session.get("messages", []))
 
         # Persistent mode: keep going until user says stop
         if _persistent_mode:
