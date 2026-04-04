@@ -31,7 +31,7 @@
 
 *TokioAI conecta Claude, GPT o Gemini a tus servidores, bases de datos, contenedores Docker, dispositivos IoT, drones, herramientas de seguridad e infraestructura cloud a traves de una arquitectura segura de tool-calling. Hecho para hackers, pentesters e investigadores de seguridad.*
 
-[Inicio Rapido](#-inicio-rapido) · [Features](#-features) · [Control de Drone](#-control-de-drone) · [Herramientas de Seguridad](#-herramientas-de-seguridad-ofensivas-y-defensivas) · [Terminal SOC](#-terminal-soc-v2) · [WAF Dashboard](#-waf-dashboard) · [Arquitectura](#-arquitectura)
+[Inicio Rapido](#-inicio-rapido) · [Features](#-features) · [Control de Drone](#-control-de-drone) · [Herramientas de Seguridad](#-herramientas-de-seguridad-ofensivas-y-defensivas) · [Terminal SOC](#-terminal-soc-v2) · [WAF Dashboard](#-waf-dashboard) · [Arquitectura](#-arquitectura) · [Escritos](#-escritos)
 
 </div>
 
@@ -727,6 +727,28 @@ pytest tests/ -v
 | nmap | Escaneo de red (`apt install nmap`) |
 | openssl | Analisis SSL/TLS (generalmente pre-instalado) |
 | curl | Testing web (generalmente pre-instalado) |
+
+---
+
+## ✍️ Escritos
+
+Mas alla del codigo, TokioAI lleva una filosofia. La carpeta [`writings/`](writings/) contiene **78 ensayos, poemas y reflexiones curadas** del fundador — extraidas de las historias destacadas de Instagram de [@niperialab](https://instagram.com/niperialab).
+
+Los temas van desde el trabajo con la sombra Jungiana hasta la filosofia de la tecnologia, desde la mitologia arquetipal hasta contra-narrativas contra la polarizacion. Estos escritos son la base intelectual detras de los principios de diseno de TokioAI.
+
+| Categoria | Cantidad |
+|---|---|
+| 🌙 Poesia & Textos Liricos | 5 |
+| ⚡ Aforismos & Destellos | 1 |
+| 🔮 Consciencia, Ego & Sombra | 25 |
+| 🏛️ Arquetipos & Mitologia Interior | 4 |
+| 🎭 Contra-Narrativas & Despolarizacion | 5 |
+| 🤖 Filosofia de la Tecnologia & Ciencia | 17 |
+| 📜 Ensayos & Reflexiones | 21 |
+
+> *"Hacking es romper. Romper con los preceptos, con los mandatos, con las ilusiones que nos atan."*
+
+**[Leer la coleccion completa →](writings/)**
 
 ---
 
