@@ -74,11 +74,12 @@ def load_builtin_tools(registry: ToolRegistry) -> int:
 
     registry.register(
         name="write_file",
-        description="Escribe contenido a un archivo. Crea directorios si no existen.",
+        description="Escribe contenido CORTO a un archivo (<50 lineas). Crea directorios si no existen. "
+                    "Para archivos grandes usa bash con cat heredoc: cat > file << 'EOF'",
         category="Archivos",
         parameters={
             "path": "Ruta al archivo",
-            "content": "Contenido a escribir",
+            "content": "Contenido a escribir (MAX 50 lineas, para mas usa bash+heredoc)",
         },
         executor=write_file,
         examples=['TOOL:write_file({"path": "/tmp/test.txt", "content": "hola"})'],

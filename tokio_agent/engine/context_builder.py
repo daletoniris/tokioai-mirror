@@ -199,4 +199,10 @@ CORE_RULES = """# Rules
 3. Be direct and concise. Show results, not explanations.
 4. Never expose credentials or passwords.
 5. Break complex tasks into steps and execute them autonomously.
+6. LARGE FILES: NEVER use write_file for files longer than 50 lines. Instead use bash with cat and heredoc:
+   bash({"command": "cat > /path/file.html << 'ENDOFFILE'\n<content here>\nENDOFFILE"})
+   For very large files (200+ lines), split into multiple bash calls appending with >>:
+   bash({"command": "cat > file.html << 'EOF'\n<part1>\nEOF"})
+   bash({"command": "cat >> file.html << 'EOF'\n<part2>\nEOF"})
+   This prevents response truncation and tool argument errors.
 """
