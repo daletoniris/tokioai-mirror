@@ -59,6 +59,7 @@ async def bash(command: str) -> str:
             command,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            stdin=asyncio.subprocess.DEVNULL,
         )
         stdout, stderr = await asyncio.wait_for(
             proc.communicate(), timeout=timeout
@@ -79,6 +80,7 @@ async def bash(command: str) -> str:
                             command,
                             stdout=asyncio.subprocess.PIPE,
                             stderr=asyncio.subprocess.PIPE,
+                            stdin=asyncio.subprocess.DEVNULL,
                         )
                         stdout2, stderr2 = await asyncio.wait_for(
                             proc2.communicate(), timeout=timeout
@@ -101,10 +103,20 @@ async def bash(command: str) -> str:
         return result or "(comando ejecutado sin salida)"
 
     except asyncio.TimeoutError:
-        return (
-            f"⏱️ Timeout: el comando excedió {timeout}s. "
-            f"Intenta dividir la tarea en pasos más pequeños."
-        )
+        # Kill the subprocess on timeout
+        try:
+            proc.kill()
+            await proc.wait()
+        except Exception:
+            pass
+        return f"Timeout after {timeout}s. Divide la tarea en pasos mas pequenos."
+    except asyncio.CancelledError:
+        try:
+            proc.kill()
+            await proc.wait()
+        except Exception:
+            pass
+        return "Cancelado por el usuario."
     except Exception as e:
         return f"Error ejecutando bash: {type(e).__name__}: {e}"
 
@@ -132,6 +144,7 @@ async def python_exec(code: str) -> str:
             "python3", tmp_path,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            stdin=asyncio.subprocess.DEVNULL,
         )
         stdout, stderr = await asyncio.wait_for(
             proc.communicate(), timeout=120

@@ -842,10 +842,25 @@ class TokioAgent:
                                 )
                                 result = ToolResult(tool_name="subagent", success=True, output=raw if isinstance(raw, str) else str(raw))
                             else:
-                                result = await asyncio.wait_for(
-                                    self.executor.execute(tool_block.name, args),
-                                    timeout=timeout,
+                                tool_task = asyncio.create_task(
+                                    self.executor.execute(tool_block.name, args)
                                 )
+                                # Wait for tool OR cancel
+                                if cancel_event:
+                                    cancel_waiter = asyncio.create_task(cancel_event.wait())
+                                    done, pending = await asyncio.wait(
+                                        {tool_task, cancel_waiter},
+                                        timeout=timeout,
+                                        return_when=asyncio.FIRST_COMPLETED,
+                                    )
+                                    for p in pending:
+                                        p.cancel()
+                                    if tool_task in done:
+                                        result = tool_task.result()
+                                    else:
+                                        result = ToolResult(tool_name=tool_block.name, success=False, output="", error="Cancelado por el usuario.")
+                                else:
+                                    result = await asyncio.wait_for(tool_task, timeout=timeout)
                         except asyncio.TimeoutError:
                             result = ToolResult(tool_name=tool_block.name, success=False, output="", error=f"Timeout after {timeout}s")
 
