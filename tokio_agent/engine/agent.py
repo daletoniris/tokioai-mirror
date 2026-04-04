@@ -855,6 +855,10 @@ class TokioAgent:
                                     )
                                     for p in pending:
                                         p.cancel()
+                                        try:
+                                            await p
+                                        except (asyncio.CancelledError, Exception):
+                                            pass
                                     if tool_task in done:
                                         result = tool_task.result()
                                     else:

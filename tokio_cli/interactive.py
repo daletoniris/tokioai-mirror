@@ -30,7 +30,12 @@ import sys
 import termios
 import time
 import tty
+import warnings
 from typing import Optional
+
+# Suppress asyncio child process reap warnings (cosmetic, happens on cancel)
+warnings.filterwarnings("ignore", message="child process pid.*exit status already read")
+logging.getLogger("asyncio").setLevel(logging.ERROR)
 
 # ─── ANSI Colors ─────────────────────────────────────
 
@@ -172,6 +177,16 @@ def _check_escape() -> bool:
     except Exception:
         pass
     return False
+
+
+def _flush_stdin():
+    """Flush any buffered bytes from stdin (leftover from cbreak mode)."""
+    if not sys.stdin.isatty():
+        return
+    try:
+        termios.tcflush(sys.stdin.fileno(), termios.TCIFLUSH)
+    except Exception:
+        pass
 
 
 # ─── Sensitive Data Masking ──────────────────────────
@@ -331,14 +346,17 @@ async def process_streaming(agent, user_input: str, session_id: str):
 
     cancel_task = asyncio.create_task(_check_cancel())
 
+    stream_gen = None
     try:
         spinner.start("thinking...")
 
-        async for event_type, data in agent.process_message_stream(
+        stream_gen = agent.process_message_stream(
             user_message=user_input,
             session_id=session_id,
             cancel_event=cancel_event,
-        ):
+        )
+
+        async for event_type, data in stream_gen:
             if event_type == "thinking":
                 current_round = data
                 if data > 1:
@@ -399,19 +417,34 @@ async def process_streaming(agent, user_input: str, session_id: str):
         cancel_event.set()
         print(f"\n  {C_YELLOW}⛔ Cancelado{C_RESET}")
 
+    except Exception as e:
+        spinner.stop()
+        print(f"\n{C_RED}Error inesperado: {e}{C_RESET}")
+
     finally:
         cancel_event.set()
+        spinner.stop()
+
+        # Close the async generator to release resources
+        if stream_gen is not None:
+            try:
+                await stream_gen.aclose()
+            except Exception:
+                pass
+
         cancel_task.cancel()
         try:
             await cancel_task
         except asyncio.CancelledError:
             pass
-        # Restore terminal
+
+        # Restore terminal ALWAYS, then flush leftover input
         if old_settings:
             try:
-                termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+                termios.tcsetattr(sys.stdin, termios.TCSANOW, old_settings)
             except Exception:
                 pass
+        _flush_stdin()
 
 
 # ─── Main Loop ───────────────────────────────────────
@@ -484,7 +517,23 @@ async def run_interactive(session_id: Optional[str] = None, max_rounds: int = 25
     if _persistent_mode:
         print(f"  {C_YELLOW}Modo persistente: seguira trabajando hasta que escribas 'stop'{C_RESET}")
 
+    # Save clean terminal state for recovery
+    _clean_term = None
+    try:
+        if sys.stdin.isatty():
+            _clean_term = termios.tcgetattr(sys.stdin)
+    except Exception:
+        pass
+
     while True:
+        # Ensure terminal is in a sane state before reading input
+        if _clean_term:
+            try:
+                termios.tcsetattr(sys.stdin, termios.TCSANOW, _clean_term)
+            except Exception:
+                pass
+        _flush_stdin()
+
         try:
             user_input = input("\ntokio> ").strip()
         except (EOFError, KeyboardInterrupt):
