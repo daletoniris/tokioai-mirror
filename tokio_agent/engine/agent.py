@@ -261,7 +261,7 @@ class TokioAgent:
                     system_prompt=system_prompt,
                     messages=api_messages,
                     tools=anthropic_tools,
-                    max_tokens=4096,
+                    max_tokens=16384,
                 )
                 self._stats["total_tokens"] += response.input_tokens + response.output_tokens
             except Exception as e:
@@ -272,13 +272,34 @@ class TokioAgent:
                         system_prompt=system_prompt,
                         user_prompt=user_message,
                         conversation=conversation,
-                        max_tokens=4096,
+                        max_tokens=16384,
                     )
                     self._stats["total_tokens"] += response.input_tokens + response.output_tokens
                     final_response = response.text
                 except Exception as e2:
                     final_response = f"Error comunicando con el LLM: {e2}"
                 break
+
+            # Handle truncated response (max_tokens hit mid-tool-use)
+            if response.finish_reason == "max_tokens":
+                if response.has_tool_use:
+                    api_messages.append({"role": "assistant", "content": self._serialize_content(response.raw.content)})
+                    trunc_results = []
+                    for tool_block in response.tool_use:
+                        trunc_results.append({
+                            "type": "tool_result",
+                            "tool_use_id": tool_block.id,
+                            "content": "ERROR: Tu respuesta fue truncada (max_tokens). "
+                                       "Divide el contenido en partes mas pequenas. "
+                                       "Para archivos grandes, usa bash con cat/heredoc o escribe por secciones.",
+                            "is_error": True,
+                        })
+                    api_messages.append({"role": "user", "content": trunc_results})
+                    logger.warning("Response truncated at max_tokens, retrying")
+                    continue
+                else:
+                    final_response = response.text
+                    break
 
             # Check if model wants to use tools
             if not response.has_tool_use:
@@ -291,6 +312,24 @@ class TokioAgent:
             # Execute each tool and build tool_result blocks
             tool_results = []
             for tool_block in response.tool_use:
+                # Validate required arguments
+                tool_def = self.registry.get(tool_block.name)
+                if tool_def and tool_def.parameters:
+                    required = [
+                        p for p, desc in tool_def.parameters.items()
+                        if "optional" not in desc.lower() and "default" not in desc.lower()
+                    ]
+                    missing = [p for p in required if p not in tool_block.input]
+                    if missing:
+                        tool_results.append({
+                            "type": "tool_result",
+                            "tool_use_id": tool_block.id,
+                            "content": f"ERROR: Argumentos faltantes: {', '.join(missing)}. "
+                                       f"Reintenta con contenido mas corto o dividido en partes.",
+                            "is_error": True,
+                        })
+                        continue
+
                 if self._on_tool_start:
                     self._on_tool_start(tool_block.name, tool_block.input)
 
@@ -791,7 +830,7 @@ class TokioAgent:
                     system_prompt=system_prompt,
                     messages=api_messages,
                     tools=anthropic_tools,
-                    max_tokens=4096,
+                    max_tokens=16384,
                 ):
                     if cancel_event and cancel_event.is_set():
                         break
@@ -818,6 +857,30 @@ class TokioAgent:
                 if llm_response:
                     self._stats["total_tokens"] += llm_response.input_tokens + llm_response.output_tokens
 
+                    # Handle truncated response (max_tokens hit mid-tool-use)
+                    if llm_response.finish_reason == "max_tokens":
+                        if llm_response.has_tool_use:
+                            # Response was cut off mid-tool-use — tell the LLM to retry with smaller output
+                            api_messages.append({"role": "assistant", "content": self._serialize_content(llm_response.raw.content)})
+                            # Send error for each truncated tool
+                            trunc_results = []
+                            for tool_block in llm_response.tool_use:
+                                trunc_results.append({
+                                    "type": "tool_result",
+                                    "tool_use_id": tool_block.id,
+                                    "content": "ERROR: Tu respuesta fue truncada (max_tokens). "
+                                               "Divide el contenido en partes mas pequenas. "
+                                               "Para archivos grandes, usa bash con cat/heredoc o escribe por secciones.",
+                                    "is_error": True,
+                                })
+                            api_messages.append({"role": "user", "content": trunc_results})
+                            logger.warning(f"Response truncated at max_tokens, asking LLM to retry with smaller output")
+                            continue  # Retry this round
+                        else:
+                            # Text was truncated but no tools — just use what we have
+                            final_response = llm_response.text
+                            break
+
                     if not llm_response.has_tool_use:
                         final_response = llm_response.text
                         break
@@ -828,6 +891,27 @@ class TokioAgent:
                     # Execute tools
                     tool_results = []
                     for tool_block in llm_response.tool_use:
+                        # Validate required arguments before executing
+                        tool_def = self.registry.get(tool_block.name)
+                        if tool_def and tool_def.parameters:
+                            required = [
+                                p for p, desc in tool_def.parameters.items()
+                                if "optional" not in desc.lower() and "default" not in desc.lower()
+                            ]
+                            missing = [p for p in required if p not in tool_block.input]
+                            if missing:
+                                err_msg = (f"ERROR: Argumentos faltantes: {', '.join(missing)}. "
+                                           f"La respuesta fue probablemente truncada. "
+                                           f"Reintenta con contenido mas corto o dividido en partes.")
+                                tool_results.append({
+                                    "type": "tool_result",
+                                    "tool_use_id": tool_block.id,
+                                    "content": err_msg,
+                                    "is_error": True,
+                                })
+                                yield ("tool_end", (tool_block.name, f"Args incompletos: {', '.join(missing)}"))
+                                continue
+
                         yield ("tool_start", (tool_block.name, tool_block.input))
 
                         args = self._sanitize_tool_args(tool_block.name, tool_block.input)
