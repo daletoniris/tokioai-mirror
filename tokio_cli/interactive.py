@@ -389,6 +389,7 @@ async def process_streaming(agent, user_input: str, session_id: str):
                 if output and output.strip():
                     preview = _mask_sensitive(output.strip().replace("\n", " ")[:120])
                     print(f"      {C_DIM}-> {preview}{'...' if len(output.strip()) > 120 else ''}{C_RESET}")
+                spinner.start("thinking...")
 
             elif event_type == "text":
                 # Non-streaming fallback
