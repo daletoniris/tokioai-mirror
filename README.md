@@ -1343,7 +1343,7 @@ pytest tests/ -v
 
 ## ✍️ Writings
 
-Beyond code, TokioAI carries a philosophy. The [`writings/`](writings/) folder contains **78 curated essays, poems, and reflections** by the founder — extracted from the Instagram highlights of [@niperialab](https://instagram.com/niperialab).
+Beyond code, TokioAI carries a philosophy. The [Niperia Lab](https://github.com/daletoniris/niperialab) repository contains **78 curated essays, poems, and reflections** by the founder — extracted from the Instagram highlights of [@niperialab](https://instagram.com/niperialab).
 
 Topics range from Jungian shadow work to technology philosophy, from archetypal mythology to counter-narratives against polarization. These writings are the intellectual foundation behind TokioAI's design principles.
 
@@ -1359,7 +1359,7 @@ Topics range from Jungian shadow work to technology philosophy, from archetypal 
 
 > *"Hacking is breaking. Breaking with precepts, mandates, and the illusions that bind us."*
 
-**[Read the full collection →](writings/)**
+**[Read the full collection →](https://github.com/daletoniris/niperialab)**
 
 ---
 
