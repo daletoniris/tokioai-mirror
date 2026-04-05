@@ -294,11 +294,14 @@ class AnthropicLLM(BaseLLM):
         thread.start()
 
         while True:
+            # Non-blocking poll: check queue without consuming a thread pool worker
             try:
-                kind, value = await asyncio.to_thread(event_queue.get, timeout=0.1)
-            except Exception:
+                kind, value = event_queue.get_nowait()
+            except queue.Empty:
                 if not thread.is_alive():
                     break
+                # Yield control to event loop (lets spinner animate)
+                await asyncio.sleep(0.05)
                 continue
 
             if kind == "text":

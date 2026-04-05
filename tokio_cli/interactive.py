@@ -122,25 +122,25 @@ class Spinner:
         self._message = message
         self._task: Optional[asyncio.Task] = None
         self._active = False
-        self._stopped = False
         self._start_time = 0.0
 
     def start(self, message: Optional[str] = None):
         if message:
             self._message = message
         self._active = True
-        self._stopped = False
         self._start_time = time.time()
-        if self._task is None or self._task.done():
-            self._task = asyncio.ensure_future(self._spin())
+        # Always kill old task and create a fresh one
+        if self._task and not self._task.done():
+            self._task.cancel()
+        self._task = asyncio.ensure_future(self._spin())
 
     def stop(self):
         self._active = False
-        self._stopped = True
-        sys.stdout.write(C_CLEAR_LINE)
-        sys.stdout.flush()
         if self._task and not self._task.done():
             self._task.cancel()
+            self._task = None
+        sys.stdout.write(C_CLEAR_LINE)
+        sys.stdout.flush()
 
     def update(self, message: str):
         self._message = message
@@ -158,10 +158,6 @@ class Spinner:
                 await asyncio.sleep(0.08)
         except asyncio.CancelledError:
             pass
-        finally:
-            if not self._stopped:
-                sys.stdout.write(C_CLEAR_LINE)
-                sys.stdout.flush()
 
 
 # ─── Key Detection ───────────────────────────────────
