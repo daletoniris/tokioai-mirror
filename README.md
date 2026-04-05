@@ -125,28 +125,15 @@ tokio> connect the drone, take off, patrol in a square, and land
 [31.2s | 12K tok | 5 tools]
 ```
 
-### 🎬 Video Demos
+### 🎬 Full Demo Video
 
-<table>
-<tr>
-<td width="50%" align="center">
+<div align="center">
 
-<video src="https://raw.githubusercontent.com/TokioAI/tokioai-v1.8/master/demo/tokioai-demo-1.mp4" controls width="100%"></video>
+[![TokioAI Full Demo](https://img.youtube.com/vi/Ll5UXBwXUzY/maxresdefault.jpg)](https://www.youtube.com/watch?v=Ll5UXBwXUzY)
 
-**Demo 1** — TokioAI in action
+**▶️ Click to watch** — Complete demo: CLI, Telegram Bot, WAF Dashboard, AI Vision, Drone, IoT, Health Monitor & more
 
-</td>
-<td width="50%" align="center">
-
-<video src="https://raw.githubusercontent.com/TokioAI/tokioai-v1.8/master/demo/tokioai-demo-2.mp4" controls width="100%"></video>
-
-**Demo 2** — TokioAI in action
-
-</td>
-</tr>
-</table>
-
-> *Videos located in [`demo/`](demo/) directory.*
+</div>
 
 ---
 

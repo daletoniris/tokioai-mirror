@@ -69,28 +69,15 @@ tokio> chequea si alguien esta haciendo ataques deauth en el WiFi
 tokio> _
 ```
 
-### 🎬 Video Demos
+### 🎬 Video Demo Completo
 
-<table>
-<tr>
-<td width="50%" align="center">
+<div align="center">
 
-<video src="https://raw.githubusercontent.com/TokioAI/tokioai-v1.8/master/demo/tokioai-demo-1.mp4" controls width="100%"></video>
+[![TokioAI Demo Completo](https://img.youtube.com/vi/Ll5UXBwXUzY/maxresdefault.jpg)](https://www.youtube.com/watch?v=Ll5UXBwXUzY)
 
-**Demo 1** — TokioAI en acción
+**▶️ Click para ver** — Demo completo: CLI, Telegram Bot, WAF Dashboard, AI Vision, Drone, IoT, Health Monitor y más
 
-</td>
-<td width="50%" align="center">
-
-<video src="https://raw.githubusercontent.com/TokioAI/tokioai-v1.8/master/demo/tokioai-demo-2.mp4" controls width="100%"></video>
-
-**Demo 2** — TokioAI en acción
-
-</td>
-</tr>
-</table>
-
-> *Videos en el directorio [`demo/`](demo/).*
+</div>
 
 ---
 
