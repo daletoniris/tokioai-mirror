@@ -42,6 +42,9 @@ from .coffee_esphome import CoffeeMachine
 from .health_monitor import HealthMonitor
 from .vision_filter import VisionFilter
 from .thought_log import ThoughtLog
+from .ble_security_monitor import BLESecurityMonitor
+from .wpa2_monitor import WPA2Monitor
+from .mavlink_drone import MAVLinkDrone
 
 # ---------------------------------------------------------------------------
 # Precise Person Counting — zero false positives
@@ -139,7 +142,7 @@ def count_persons_precise(detections, known_faces_count: int = 0,
 # ---------------------------------------------------------------------------
 # Core Push — notify GCP brain of events (fire-and-forget in thread)
 # ---------------------------------------------------------------------------
-CORE_API_URL = os.getenv("TOKIO_CORE_API", "")  # e.g. http://your-server:8000
+CORE_API_URL = os.getenv("TOKIO_CORE_API", "")  # e.g. http://100.125.151.118:8000
 
 
 def _push_to_core(endpoint: str, data: dict):
@@ -561,6 +564,27 @@ class TokioEntity:
             self.health.start()
             self._say("Monitor de salud BLE activo.", C_TEXT_OK)
 
+        # BLE Security Monitor — Bluetooth attack detection
+        self.ble_security = BLESecurityMonitor()
+        self.ble_security.set_callback(self._on_ble_attack)
+        self.ble_security.start()
+        self._say("Monitor seguridad BLE activo.", C_TEXT_OK)
+
+        # WPA2 Monitor — handshake capture, PMKID, KRACK detection
+        self.wpa2_monitor = WPA2Monitor(
+            protected_ssid=os.getenv("WIFI_PROTECTED_SSID", ""),
+        )
+        # Will be hooked into wifi_defense packet processing
+        if self.wifi_defense:
+            self.wpa2_monitor.set_callback(self._on_wpa2_attack)
+            self._say("Monitor WPA2 activo.", C_TEXT_OK)
+
+        # MAVLink Drone — ArduPilot/Pixhawk integration
+        self.mavlink_drone = MAVLinkDrone(simulator=False)  # Real mode, connect via API
+
+        # Stand mode — filters intimate content for public display
+        self._stand_mode = False
+
         # Drone Vision Player (visual servoing — legacy camera-based)
         # NOT auto-started — conflicts with FPV. Only start via API when needed.
         self.drone_vision = DroneVisionPlayer()
@@ -655,6 +679,24 @@ class TokioEntity:
             "message": message,
             "severity": severity,
         })
+
+
+    def _on_ble_attack(self, attack_type: str, description: str):
+        """React to Bluetooth attack detected by BLE security monitor."""
+        severity_map = {
+            "blueborne": ("critical", C_WIFI_DANGER, Emotion.ANGRY),
+            "knob": ("critical", C_WIFI_DANGER, Emotion.ANGRY),
+            "adv_flood": ("high", C_WIFI_WARN, Emotion.ALERT),
+            "recon": ("medium", C_TEXT, Emotion.ALERT),
+        }
+        sev, color, emotion = severity_map.get(attack_type, ("medium", C_TEXT, Emotion.ALERT))
+        self._say(f"BLE: {description}", color, source="ble_security")
+        self.face.set_emotion(emotion, "BLE Attack!")
+
+    def _on_wpa2_attack(self, attack_type: str, description: str):
+        """React to WPA2 attack (handshake capture, PMKID, KRACK)."""
+        self._say(f"WPA2: {description}", C_WIFI_DANGER, source="wpa2_monitor")
+        self.face.set_emotion(Emotion.ANGRY, "WPA2 Attack!")
 
     def _on_ai_thought(self, text: str, emotion: str):
         """Receive real AI analysis from Claude."""

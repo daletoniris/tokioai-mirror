@@ -35,7 +35,18 @@ import time
 from dataclasses import dataclass, field
 from typing import Optional, Callable
 
-WATCH_ADDR = os.getenv("TOKIO_WATCH_ADDR", "")
+# Health database
+try:
+    from .health_db import HealthDB
+    _health_db_available = True
+except ImportError:
+    try:
+        from health_db import HealthDB
+        _health_db_available = True
+    except ImportError:
+        _health_db_available = False
+
+WATCH_ADDR = os.getenv("TOKIO_WATCH_ADDR", "D2:2E:68:90:39:01")
 WATCH_NAME = os.getenv("TOKIO_WATCH_NAME", "Nexus")
 
 # BLE handles (MoYoung V2 / MOY-D695)
@@ -245,6 +256,15 @@ class HealthMonitor:
         # Security
         self._security = BLESecurity(watch_addr)
 
+        # Health database for persistent storage
+        self._health_db = None
+        if _health_db_available:
+            try:
+                self._health_db = HealthDB()
+                print("[Health] SQLite database initialized")
+            except Exception as e:
+                print(f"[Health] DB init failed: {e}")
+
         try:
             result = subprocess.run(["which", "gatttool"], capture_output=True, timeout=5)
             self._available = result.returncode == 0
@@ -267,6 +287,10 @@ class HealthMonitor:
     @property
     def security(self) -> BLESecurity:
         return self._security
+
+    @property
+    def health_db(self):
+        return self._health_db
 
     def start(self, callback: Optional[Callable] = None):
         if not self._available or self._running:
@@ -602,6 +626,11 @@ class HealthMonitor:
                     self._data.battery = bat
                     self._data.last_update = time.time()
                     self._log_reading(bat=bat)
+                    if self._health_db:
+                        try:
+                            self._health_db.store_battery(bat)
+                        except Exception:
+                            pass
                     print(f"[Health] Battery: {bat}%")
 
         # FEE3 proprietary sensor data (handle 0x0051)
@@ -640,6 +669,11 @@ class HealthMonitor:
         self._data.last_update = time.time()
         self._data.connected = True
         self._log_reading(hr=hr)
+        if self._health_db:
+            try:
+                self._health_db.store_hr(hr)
+            except Exception:
+                pass
         print(f"[Health] HR: {hr} bpm")
         if self._callback:
             try:
@@ -673,6 +707,11 @@ class HealthMonitor:
                 self._data.last_bp_time = time.time()
                 self._data.last_update = time.time()
                 self._log_reading(bp_sys=sys_bp, bp_dia=dia_bp)
+                if self._health_db:
+                    try:
+                        self._health_db.store_bp(sys_bp, dia_bp)
+                    except Exception:
+                        pass
                 print(f"[Health] BP: {sys_bp}/{dia_bp} mmHg")
                 if self._callback:
                     try:
@@ -690,6 +729,11 @@ class HealthMonitor:
                 self._data.last_spo2_time = time.time()
                 self._data.last_update = time.time()
                 self._log_reading(spo2=spo2)
+                if self._health_db:
+                    try:
+                        self._health_db.store_spo2(spo2)
+                    except Exception:
+                        pass
                 print(f"[Health] SpO2: {spo2}%")
                 if self._callback:
                     try:
@@ -723,6 +767,11 @@ class HealthMonitor:
                 self._data.last_steps_time = time.time()
                 self._data.last_update = time.time()
                 self._log_reading(steps=steps, distance=distance, calories=calories)
+                if self._health_db:
+                    try:
+                        self._health_db.store_steps(steps, distance, calories)
+                    except Exception:
+                        pass
                 print(f"[Health] Steps: {steps}, Distance: {distance}m, Cal: {calories}")
                 if self._callback:
                     try:
