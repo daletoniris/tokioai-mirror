@@ -73,7 +73,7 @@ tokio> _
 
 <div align="center">
 
-[![TokioAI Demo Completo](https://img.youtube.com/vi/Ll5UXBwXUzY/maxresdefault.jpg)](https://www.youtube.com/watch?v=Ll5UXBwXUzY)
+[![TokioAI Demo Completo](https://img.youtube.com/vi/5CV-F6wYrhw/maxresdefault.jpg)](https://www.youtube.com/watch?v=5CV-F6wYrhw)
 
 **▶️ Click para ver** — Demo completo: CLI, Telegram Bot, WAF Dashboard, AI Vision, Drone, IoT, Health Monitor y más
 

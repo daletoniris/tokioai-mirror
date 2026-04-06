@@ -129,7 +129,7 @@ tokio> connect the drone, take off, patrol in a square, and land
 
 <div align="center">
 
-[![TokioAI Full Demo](https://img.youtube.com/vi/Ll5UXBwXUzY/maxresdefault.jpg)](https://www.youtube.com/watch?v=Ll5UXBwXUzY)
+[![TokioAI Full Demo](https://img.youtube.com/vi/5CV-F6wYrhw/maxresdefault.jpg)](https://www.youtube.com/watch?v=5CV-F6wYrhw)
 
 **▶️ Click to watch** — Complete demo: CLI, Telegram Bot, WAF Dashboard, AI Vision, Drone, IoT, Health Monitor & more
 
