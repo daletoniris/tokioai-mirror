@@ -838,6 +838,10 @@ class TokioAgent:
                     if event_type == "text":
                         streamed_text += event_data
                         yield ("token", event_data)
+                    elif event_type == "content_block_end":
+                        # Text block ended — tools may follow, show spinner
+                        if streamed_text:
+                            yield ("preparing", None)
                     elif event_type == "tool_start":
                         tool_uses_building[event_data["id"]] = {
                             "name": event_data["name"],

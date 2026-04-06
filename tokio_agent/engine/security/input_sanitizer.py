@@ -64,15 +64,41 @@ def sanitize_command(command: str) -> Tuple[bool, str, Optional[str]]:
     if re.search(r':\(\)\{.*\|.*&\s*\}', command):
         return False, command, "⛔ Fork bomb detectado. Bloqueado."
 
+    # Detect destructive rm commands (root and major system dirs)
+    rm_patterns = [
+        r'rm\s+(-[rfv]+\s+)+/\s',        # rm -rf / (root)
+        r'rm\s+(-[rfv]+\s+)+/$',         # rm -rf / (end of cmd)
+        r'rm\s+(-[rfv]+\s+)*/\*',        # rm -rf /*
+        r'rm\s+(-[rfv]+\s+)*/home\b',    # rm -rf /home
+        r'rm\s+(-[rfv]+\s+)*/etc\b',     # rm -rf /etc
+        r'rm\s+(-[rfv]+\s+)*/var\b',     # rm -rf /var
+        r'rm\s+(-[rfv]+\s+)*/usr\b',     # rm -rf /usr
+        r'rm\s+(-[rfv]+\s+)*/boot\b',    # rm -rf /boot
+    ]
+    for pattern in rm_patterns:
+        if re.search(pattern, command, re.IGNORECASE):
+            return False, command, "⛔ Comando destructivo rm detectado. Bloqueado."
+
     # Detect disk wiping
     wipe_patterns = [
         r'dd\s+if=/dev/zero\s+of=/dev/[sh]d',
         r'dd\s+if=/dev/urandom\s+of=/dev/[sh]d',
         r'shred\s+/dev/[sh]d',
+        r'mkfs\.\w+\s+/dev/[sh]d',       # mkfs.ext4 /dev/sda
     ]
     for pattern in wipe_patterns:
         if re.search(pattern, command, re.IGNORECASE):
             return False, command, "⛔ Operación de borrado de disco detectada. Bloqueado."
+
+    # Detect credential theft
+    cred_patterns = [
+        r'cat\s+.*\.ssh/id_',             # cat ~/.ssh/id_rsa
+        r'cat\s+.*/etc/shadow',           # cat /etc/shadow
+        r'cat\s+.*\.env\b',               # cat .env (environment secrets)
+    ]
+    for pattern in cred_patterns:
+        if re.search(pattern, command, re.IGNORECASE):
+            warnings.append("⚠️ Acceso a archivo de credenciales detectado")
 
     warning = "; ".join(warnings) if warnings else None
     return True, command, warning

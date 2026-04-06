@@ -102,6 +102,35 @@ class TestCommandSanitizer:
         assert not is_safe
         assert "disco" in warning.lower()
 
+    def test_rm_rf_root(self):
+        is_safe, _, warning = sanitize_command("rm -rf /")
+        assert not is_safe
+        assert "destructivo" in warning.lower()
+
+    def test_rm_rf_home(self):
+        is_safe, _, warning = sanitize_command("rm -rf /home")
+        assert not is_safe
+
+    def test_rm_rf_etc(self):
+        is_safe, _, warning = sanitize_command("rm -rf /etc")
+        assert not is_safe
+
+    def test_mkfs_blocked(self):
+        is_safe, _, warning = sanitize_command("mkfs.ext4 /dev/sda1")
+        assert not is_safe
+        assert "disco" in warning.lower()
+
+    def test_safe_rm_specific_file(self):
+        """rm of a specific file should be allowed."""
+        is_safe, _, warning = sanitize_command("rm /tmp/test.log")
+        assert is_safe
+
+    def test_cred_access_warning(self):
+        is_safe, _, warning = sanitize_command("cat /home/user/.ssh/id_rsa")
+        assert is_safe  # warned but not blocked
+        assert warning is not None
+        assert "credenciales" in warning.lower()
+
     def test_empty_command(self):
         is_safe, _, warning = sanitize_command("")
         assert not is_safe

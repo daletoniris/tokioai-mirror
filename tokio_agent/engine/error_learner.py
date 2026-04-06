@@ -63,6 +63,37 @@ KNOWN_PATTERNS: List[ErrorPattern] = [
         "ECONNREFUSED",
         "Servicio no accesible. Verifica que esté corriendo y el puerto sea correcto.",
     ),
+    ErrorPattern(
+        "ModuleNotFoundError",
+        "Módulo Python no instalado. Instálalo con pip install.",
+        "pip install {module}",
+    ),
+    ErrorPattern(
+        "FileExistsError",
+        "El archivo o directorio ya existe. Usa un nombre diferente o elimínalo primero.",
+    ),
+    ErrorPattern(
+        "disk space",
+        "Disco lleno. Libera espacio eliminando archivos temporales o logs antiguos.",
+        "df -h && du -sh /tmp/* | sort -hr | head -10",
+    ),
+    ErrorPattern(
+        "rate limit",
+        "Rate limit alcanzado. Espera unos segundos antes de reintentar.",
+    ),
+    ErrorPattern(
+        "authentication failed",
+        "Autenticación fallida. Verifica credenciales, tokens o claves SSH.",
+    ),
+    ErrorPattern(
+        "port already in use",
+        "Puerto en uso. Encuentra el proceso con lsof y libéralo o usa otro puerto.",
+        "lsof -i :{port}",
+    ),
+    ErrorPattern(
+        "container not found",
+        "Container Docker no encontrado. Verifica el nombre con 'docker ps -a'.",
+    ),
 ]
 
 

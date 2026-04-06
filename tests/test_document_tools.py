@@ -102,27 +102,29 @@ class TestDocumentTool:
     @pytest.mark.asyncio
     async def test_pdf_action(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            result = await document_tool("generate_pdf", {
-                "title": "Async Test",
-                "sections": [{"heading": "H1", "body": "Body"}],
-                "output_path": os.path.join(tmpdir, "async.pdf"),
-            })
+            result = await document_tool(
+                action="generate_pdf",
+                title="Async Test",
+                sections=[{"heading": "H1", "body": "Body"}],
+                output_path=os.path.join(tmpdir, "async.pdf"),
+            )
             data = json.loads(result)
             assert data["ok"] is True
 
     @pytest.mark.asyncio
     async def test_csv_action(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            result = await document_tool("generate_csv", {
-                "data": [["a", "b"], ["c", "d"]],
-                "output_path": os.path.join(tmpdir, "async.csv"),
-            })
+            result = await document_tool(
+                action="generate_csv",
+                data=[["a", "b"], ["c", "d"]],
+                output_path=os.path.join(tmpdir, "async.csv"),
+            )
             data = json.loads(result)
             assert data["ok"] is True
 
     @pytest.mark.asyncio
     async def test_invalid_action(self):
-        result = await document_tool("invalid")
+        result = await document_tool(action="invalid")
         data = json.loads(result)
         assert data["ok"] is False
         assert "supported" in data

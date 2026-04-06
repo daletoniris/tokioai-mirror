@@ -276,6 +276,10 @@ class AnthropicLLM(BaseLLM):
                                     "name": block.name,
                                 }))
 
+                        elif event_type == "content_block_stop":
+                            # Signal that a content block ended (text finished before tools)
+                            event_queue.put(("content_block_end", None))
+
                         elif event_type == "content_block_delta":
                             delta = getattr(event, "delta", None)
                             if delta:
@@ -306,6 +310,8 @@ class AnthropicLLM(BaseLLM):
 
             if kind == "text":
                 yield ("text", value)
+            elif kind == "content_block_end":
+                yield ("content_block_end", None)
             elif kind == "tool_start":
                 yield ("tool_start", value)
             elif kind == "tool_json":

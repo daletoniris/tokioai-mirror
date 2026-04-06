@@ -48,4 +48,5 @@ def test_describe_for_prompt():
     reg.register("bash", "Run bash", "System", {"command": "cmd"}, dummy_tool)
     desc = reg.describe_for_prompt()
     assert "bash" in desc
-    assert "TOOL:" in desc
+    assert "bash" in desc
+    assert "System" in desc
