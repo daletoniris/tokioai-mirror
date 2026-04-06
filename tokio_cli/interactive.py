@@ -590,6 +590,7 @@ async def process_streaming(agent, user_input: str, session_id: str):
     t0 = time.time()
 
     streaming_text = False
+    ever_streamed = False  # Track if we ever streamed tokens (to avoid double-print on "done")
     tool_count = 0
     current_round = 0
     collected_text = []
@@ -636,6 +637,7 @@ async def process_streaming(agent, user_input: str, session_id: str):
                 if not streaming_text:
                     spinner.stop()
                     streaming_text = True
+                    ever_streamed = True
                     sys.stdout.write("\n")
                 sys.stdout.write(data)
                 sys.stdout.flush()
@@ -673,21 +675,18 @@ async def process_streaming(agent, user_input: str, session_id: str):
 
             elif event_type == "text":
                 spinner.stop()
-                if not streaming_text:
+                if not streaming_text and not ever_streamed:
                     rendered = MarkdownRenderer.render(data)
                     print(f"\n{rendered}")
 
             elif event_type == "done":
                 spinner.stop()
-                if not streaming_text and data:
+                if not streaming_text and not ever_streamed and data:
+                    # Only render if we never streamed any tokens (non-streaming response)
                     rendered = MarkdownRenderer.render(data)
                     print(f"\n{rendered}")
                 elif streaming_text:
-                    # Render collected streaming text as markdown
-                    full_text = ''.join(collected_text)
-                    sys.stdout.write(C_CLEAR_LINE)
-                    # Move up and clear what was streamed raw, re-render with markdown
-                    # Actually for streaming we already printed raw, just end cleanly
+                    # End streaming cleanly
                     sys.stdout.write("\n")
 
             elif event_type == "error":
