@@ -31,7 +31,7 @@
 
 *TokioAI connects Claude, GPT, Gemini, OpenRouter, or Ollama to your servers, databases, Docker containers, IoT devices, drones, security tools, and cloud infrastructure through native tool-calling. 5 LLM providers, 30+ tools, streaming CLI, auto-compaction, subagents, and self-healing — built for hackers, pentesters, and security researchers.*
 
-[Getting Started](#-quick-start) · [Features](#-features) · [What's New](#-whats-new-in-v30) · [Drone Control](#-drone-control) · [Security Tools](#-offensive--defensive-security-tools) · [SOC Terminal](#-soc-terminal-v2) · [WAF Dashboard](#-waf-dashboard) · [Architecture](#-architecture) · [Writings](#-writings)
+[Getting Started](#-quick-start) · [Features](#-features) · [What's New](#-whats-new-in-v30) · [Drone Control](#-drone-control) · [Security Tools](#-offensive--defensive-security-tools) · [SOC Terminal](#-soc-terminal-v2) · [WAF Dashboard](#-waf-dashboard) · [Architecture](#-architecture)
 
 </div>
 
@@ -1325,28 +1325,6 @@ pytest tests/ -v
 | openssl | SSL/TLS analysis (usually pre-installed) |
 | curl | Web testing (usually pre-installed) |
 | ssh-audit | SSH server auditing (optional) |
-
----
-
-## ✍️ Writings
-
-Beyond code, TokioAI carries a philosophy. The [Niperia Lab](https://github.com/daletoniris/niperialab) repository contains **78 curated essays, poems, and reflections** by the founder — extracted from the Instagram highlights of [@niperialab](https://instagram.com/niperialab).
-
-Topics range from Jungian shadow work to technology philosophy, from archetypal mythology to counter-narratives against polarization. These writings are the intellectual foundation behind TokioAI's design principles.
-
-| Category | Count |
-|---|---|
-| 🌙 Poetry & Lyrical Texts | 5 |
-| ⚡ Aphorisms & Flashes | 1 |
-| 🔮 Consciousness, Ego & Shadow | 25 |
-| 🏛️ Archetypes & Inner Mythology | 4 |
-| 🎭 Counter-Narratives & Depolarization | 5 |
-| 🤖 Philosophy of Technology & Science | 17 |
-| 📜 Essays & Reflections | 21 |
-
-> *"Hacking is breaking. Breaking with precepts, mandates, and the illusions that bind us."*
-
-**[Read the full collection →](https://github.com/daletoniris/niperialab)**
 
 ---
 
