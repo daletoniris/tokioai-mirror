@@ -692,6 +692,52 @@ def load_builtin_tools(registry: ToolRegistry) -> int:
     except Exception as e:
         logger.warning(f"⚠️ Drone tools no disponibles: {e}")
 
+    # ── PiCar-X Robot Tools (Raspberry Pi) ──────────────────────────────
+    try:
+        from .picar_tools import picar_control
+
+        registry.register(
+            name="picar",
+            description=(
+                "Control del robot PiCar-X (Sunfounder) via Safety Proxy en Raspberry Pi. "
+                "Robot con cámara, sensores ultrasonido y grayscale, 2 motores y 3 servos. "
+                "Acciones: status (estado completo), sensors (ultrasonido/grayscale/bateria), "
+                "move (forward/backward/left/right/stop, speed, duration, angle), "
+                "stop/parar (detener), kill/emergencia (emergency stop), "
+                "camera (pan/tilt en grados), look/mirar (center/left/right/up/down), "
+                "steer/girar (angulo direccion), "
+                "obstacle_avoid/esquivar (modo autonomo esquivando obstaculos), "
+                "line_track/seguir_linea (seguir linea en el piso), "
+                "patrol/patrullar (patron: square/zigzag/circle), "
+                "dance/bailar (movimientos divertidos), "
+                "servo_test, motor_test, snapshot/foto, calibrate/calibrar, "
+                "init (re-inicializar hardware), audit/historial (log de comandos)."
+            ),
+            category="IoT",
+            parameters={
+                "action": "Accion: status, sensors, move, stop, kill, camera, look, steer, obstacle_avoid, line_track, patrol, dance, servo_test, motor_test, snapshot, calibrate, init, audit",
+                "params": "direction, speed, duration, angle, pan, tilt, pattern, servo, limit",
+            },
+            executor=picar_control,
+            examples=[
+                'TOOL:picar({"action": "status"})',
+                'TOOL:picar({"action": "sensors"})',
+                'TOOL:picar({"action": "move", "params": {"direction": "forward", "speed": 30, "duration": 2}})',
+                'TOOL:picar({"action": "move", "params": {"direction": "left", "speed": 25, "duration": 1}})',
+                'TOOL:picar({"action": "stop"})',
+                'TOOL:picar({"action": "camera", "params": {"pan": 45, "tilt": -20}})',
+                'TOOL:picar({"action": "look", "params": {"direction": "left"}})',
+                'TOOL:picar({"action": "obstacle_avoid", "params": {"duration": 20, "speed": 30}})',
+                'TOOL:picar({"action": "patrol", "params": {"pattern": "square", "duration": 30}})',
+                'TOOL:picar({"action": "dance"}})',
+                'TOOL:picar({"action": "snapshot"})',
+                'TOOL:picar({"action": "kill"})',
+            ],
+        )
+        count += 1
+    except Exception as e:
+        logger.warning(f"⚠️ PiCar-X tools no disponibles: {e}")
+
     # ── Coffee Machine Tools (Raspberry Pi) ─────────────────────────────
     try:
         from .coffee_tools import coffee_control
@@ -735,7 +781,9 @@ def load_builtin_tools(registry: ToolRegistry) -> int:
                 "Vision: see (que ve Tokio), status (estado), snapshot (foto), thoughts (pensamientos IA), "
                 "say (mensaje en pantalla), teach (registrar cara), faces (caras conocidas), emotion, model, look_at. "
                 "Salud: health (reporte COMPLETO de salud del usuario: HR, presion, SpO2, historial, promedios, evaluacion), "
-                "health_status (datos actuales del smartwatch). "
+                "health_status (datos actuales del smartwatch), "
+                "health_store (registrar lectura manual: glucose/cholesterol/hemoglobin/uric_acid con metric y value), "
+                "health_full (informe COMPLETO combinando smartwatch + Accu-Answer iSaw con analisis). "
                 "Casa: ha_status (Home Assistant). WiFi: wifi (defensa WiFi). "
                 "AI Brain: ai_status, ai_memory, ai_correct (corregir algo que dice mal), "
                 "ai_teach (ensenar un hecho), ai_forget (olvidar observacion erronea), ai_person, ai_environment. "
@@ -743,7 +791,7 @@ def load_builtin_tools(registry: ToolRegistry) -> int:
             ),
             category="IoT",
             parameters={
-                "action": "Accion: see, status, snapshot, thoughts, say, teach, faces, emotion, model, look_at, health, health_status, ha_status, wifi, ai_status, ai_memory, ai_correct, ai_teach, ai_forget, ai_person, ai_environment",
+                "action": "Accion: see, status, snapshot, thoughts, say, teach, faces, emotion, model, look_at, health, health_status, health_store, health_full, ha_status, wifi, ai_status, ai_memory, ai_correct, ai_teach, ai_forget, ai_person, ai_environment",
                 "params": "Parametros segun accion: text, color, name, role, emotion, message, model, x, y, correction, key, value, fact, notes",
             },
             executor=raspi_vision,
@@ -797,6 +845,34 @@ def load_builtin_tools(registry: ToolRegistry) -> int:
         count += 1
     except Exception as e:
         logger.warning(f"⚠️ Security tools no disponibles: {e}")
+
+    # ── SITREP — Unified Situational Awareness ─────────────────────────
+    try:
+        from .sitrep_tool import sitrep
+        registry.register(
+            name="sitrep",
+            description=(
+                "Reporte de situación unificado: estado de TODOS los sistemas, "
+                "nivel de amenaza DEFCON, WAF, WiFi, salud, drone, HA, infraestructura. "
+                "Un solo comando para ver todo. "
+                "Actions: full (completo), quick (rápido), threats (amenazas), "
+                "health (salud), infra (infraestructura)"
+            ),
+            category="Security",
+            parameters={
+                "action": "full|quick|threats|health|infra",
+                "params": "(Opcional) Parámetros adicionales",
+            },
+            executor=sitrep,
+            examples=[
+                'TOOL:sitrep({"action": "full"})',
+                'TOOL:sitrep({"action": "quick"})',
+                'TOOL:sitrep({"action": "threats"})',
+            ],
+        )
+        count += 1
+    except Exception as e:
+        logger.warning(f"⚠️ SITREP tool no disponible: {e}")
 
     logger.info(f"✅ {count} tools builtin registradas")
     return count

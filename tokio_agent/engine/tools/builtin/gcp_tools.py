@@ -106,24 +106,86 @@ async def _exec(cmd: str, timeout: int = 120) -> str:
 _waf_dashboard_token = ""
 _waf_dashboard_token_exp = 0
 
+# GCP SSH config for CLI-local access
+_GCP_SSH_KEY = os.path.expanduser("~/.ssh/google_compute_engine")
+_GCP_SSH_HOST = "osboxes@35.225.133.230"
+
+
+def _is_running_in_gcp_docker() -> bool:
+    """Detect if we're running inside the GCP Docker network."""
+    # If WAF_DASHBOARD_URL is explicitly set, respect it
+    if os.getenv("WAF_DASHBOARD_URL"):
+        return True
+    # If DASHBOARD_PASSWORD env var exists AND we can resolve Docker hostnames, we're in GCP
+    # Simple check: if the container hostname file exists or POSTGRES_HOST is set to docker name
+    postgres_host = os.getenv("POSTGRES_HOST", "")
+    if postgres_host in ("tokio-gcp-postgres", "postgres"):
+        return True
+    # Check if SSH key exists (means we're on CLI machine)
+    if os.path.exists(_GCP_SSH_KEY):
+        return False
+    return True  # Default to Docker assumption
+
 
 async def _waf_dashboard_request(endpoint: str, method: str = "GET",
                                   body: dict = None) -> dict:
-    """Make authenticated request to WAF Dashboard API (same Docker network)."""
+    """Make authenticated request to WAF Dashboard API.
+    
+    Auto-detects environment:
+    - In GCP Docker: direct curl to container network
+    - On CLI local: routes through SSH to GCP
+    """
     global _waf_dashboard_token, _waf_dashboard_token_exp
     import time as _time
 
-    base_url = os.getenv("WAF_DASHBOARD_URL", "http://tokio-gcp-dashboard-api:8000")
-    password = os.getenv("DASHBOARD_PASSWORD", os.getenv("TOKIO_WAF_PASS", ""))
+    in_docker = _is_running_in_gcp_docker()
+    base_url = os.getenv("WAF_DASHBOARD_URL", "http://tokio-gcp-dashboard-api:8000") if in_docker else "http://127.0.0.1:8000"
+    password = os.getenv("DASHBOARD_PASSWORD", os.getenv("TOKIO_WAF_PASS", "REDACTED_PASSWORD"))
+
+    _ssh_prefix = (
+        f"ssh -i {_GCP_SSH_KEY} -o StrictHostKeyChecking=no "
+        f"-o ConnectTimeout=10 {_GCP_SSH_HOST}"
+    )
+
+    def _curl_via_gcp(url: str, headers: list = None, method: str = "GET",
+                      body_json: str = None) -> str:
+        """Build a curl command routed to GCP — handles SSH escaping cleanly.
+        
+        For POST with body, uses stdin pipe (echo '...' | ssh ... curl -d @-)
+        to completely avoid nested quoting issues.
+        """
+        h_args = ""
+        for h in (headers or []):
+            if in_docker:
+                h_args += f" -H '{h}'"
+            else:
+                h_args += f" -H '{h}'"
+
+        method_flag = "" if method == "GET" else f" -X {method}"
+        curl_cmd = f"curl -sf{method_flag} '{url}'{h_args}"
+
+        if body_json:
+            curl_cmd += " -d @-"
+            if in_docker:
+                return f"echo '{body_json}' | {curl_cmd}"
+            else:
+                return f"echo '{body_json}' | {_ssh_prefix} \"{curl_cmd}\""
+        else:
+            if in_docker:
+                return curl_cmd
+            else:
+                return f'{_ssh_prefix} "{curl_cmd}"'
 
     # Auto-login if token expired
     if not _waf_dashboard_token or _time.time() > _waf_dashboard_token_exp - 60:
-        login_cmd = (
-            f"curl -sf '{base_url}/api/auth/login' "
-            f"-H 'Content-Type: application/json' "
-            f"-d '{{\"username\":\"admin\",\"password\":\"{password}\"}}'"
+        login_body = json.dumps({"username": "admin", "password": password})
+        login_cmd = _curl_via_gcp(
+            f"{base_url}/api/auth/login",
+            headers=["Content-Type: application/json"],
+            method="POST",
+            body_json=login_body,
         )
-        result = await _exec_direct(login_cmd, timeout=10)
+        result = await _exec_direct(login_cmd, timeout=15)
         try:
             data = json.loads(result)
             _waf_dashboard_token = data.get("token", "")
@@ -132,14 +194,19 @@ async def _waf_dashboard_request(endpoint: str, method: str = "GET",
             return {"error": f"WAF login failed: {result}"}
 
     # Make the actual request
-    headers = f"-H 'Authorization: Bearer {_waf_dashboard_token}'"
+    auth_header = f"Authorization: Bearer {_waf_dashboard_token}"
     if method == "GET":
-        cmd = f"curl -sf '{base_url}{endpoint}' {headers}"
+        cmd = _curl_via_gcp(f"{base_url}{endpoint}", headers=[auth_header])
     elif method == "POST":
-        body_str = json.dumps(body or {})
-        cmd = f"curl -sf -X POST '{base_url}{endpoint}' {headers} -H 'Content-Type: application/json' -d '{body_str}'"
+        body_json = json.dumps(body or {})
+        cmd = _curl_via_gcp(
+            f"{base_url}{endpoint}",
+            headers=[auth_header, "Content-Type: application/json"],
+            method="POST",
+            body_json=body_json,
+        )
     elif method == "DELETE":
-        cmd = f"curl -sf -X DELETE '{base_url}{endpoint}' {headers}"
+        cmd = _curl_via_gcp(f"{base_url}{endpoint}", headers=[auth_header], method="DELETE")
     else:
         return {"error": f"Unsupported method: {method}"}
 

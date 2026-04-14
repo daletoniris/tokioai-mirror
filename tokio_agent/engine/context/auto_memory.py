@@ -58,10 +58,14 @@ MEMORY:referencia|El servidor usa PostgreSQL 15, puerto 5432
 
 Reglas:
 - Solo extrae informacion EXPLICITA de los mensajes, no inferencias
-- No dupliques memorias que ya existen
-- No extraigas informacion temporal o de una sola vez
-- Si no hay nada que recordar, responde: MEMORY:none
-- Maximo 5 memorias por extraccion
+- No dupliques memorias que ya existen (revisa las existentes cuidadosamente)
+- No extraigas informacion temporal o de una sola vez (ej: "la raspi esta apagada ahora")
+- No guardes estados transitorios (ej: "el drone tiene 81% bateria", "FPS actual 16.6")
+- Solo guarda HECHOS DURABLES (ej: "el drone se controla via proxy en puerto 5001")
+- Si un hecho ya existe en las memorias existentes, aunque con palabras diferentes, NO lo dupliques
+- Prioriza FEEDBACK (correcciones del usuario, cosas que pidio NO hacer) sobre datos tecnicos
+- Si no hay nada NUEVO que recordar, responde: MEMORY:none
+- Maximo 3 memorias por extraccion
 """
 
 
@@ -174,9 +178,14 @@ class AutoMemoryExtractor:
         if not memories:
             return 0
 
-        # Save memories
+        # Save memories (with dedup check)
         saved = 0
+        existing_text = existing.lower() if existing else ""
         for mem_type, content in memories:
+            # Skip if substantially similar content already exists
+            if self._is_duplicate(content, existing_text):
+                logger.debug(f"Skipping duplicate memory: {content[:60]}")
+                continue
             try:
                 if user_id:
                     self.workspace.add_memory(
@@ -186,6 +195,9 @@ class AutoMemoryExtractor:
                 else:
                     self.workspace.add_memory(f"[{mem_type}] {content}")
                 saved += 1
+                # Add to existing_text so subsequent entries in this batch
+                # don't duplicate each other
+                existing_text += " " + content.lower()
             except Exception as e:
                 logger.error(f"Failed to save memory: {e}")
 
@@ -197,6 +209,31 @@ class AutoMemoryExtractor:
             )
 
         return saved
+
+    @staticmethod
+    def _is_duplicate(new_content: str, existing_text: str) -> bool:
+        """Check if a memory entry is already covered by existing memories."""
+        new_lower = new_content.lower().strip()
+        if len(new_lower) < 10:
+            return False
+
+        # Extract key words (nouns, numbers, names)
+        import re
+        stopwords = {'el', 'la', 'los', 'las', 'un', 'una', 'de', 'del', 'en', 'que',
+                     'con', 'por', 'para', 'se', 'no', 'es', 'y', 'o', 'a', 'al',
+                     'tiene', 'usa', 'está', 'fue', 'son', 'puede', 'como', 'sin',
+                     'más', 'ha', 'si', 'todo', 'han', 'hay', 'ser', 'solo', 'the',
+                     'is', 'and', 'or', 'to', 'in', 'of', 'for', 'on', 'at', 'with'}
+        words = re.findall(r'\w+', new_lower)
+        key_words = [w for w in words if w not in stopwords and len(w) > 2]
+
+        if not key_words:
+            return False
+
+        # If 70%+ of key words appear in existing text, it's a duplicate
+        matches = sum(1 for w in key_words if w in existing_text)
+        ratio = matches / len(key_words)
+        return ratio > 0.70
 
     def _parse_memories(self, text: str) -> List[tuple]:
         """Parse MEMORY:type|content lines from LLM response."""
@@ -214,7 +251,7 @@ class AutoMemoryExtractor:
                     if content and len(content) > 5:
                         memories.append((mem_type, content))
 
-        return memories[:5]  # Max 5 per extraction
+        return memories[:3]  # Max 3 per extraction (less = less duplicates)
 
     def _response_has_memory_writes(self, response: str) -> bool:
         """Check if the agent's response already contains memory writes."""

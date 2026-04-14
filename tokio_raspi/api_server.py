@@ -587,7 +587,91 @@ def create_api(app_instance: TokioRaspiApp) -> Flask:
 
     @api.route("/dashboard", methods=["GET"])
     def dashboard():
-        return api.send_static_file("dashboard.html")
+        try:
+            return api.send_static_file("dashboard.html")
+        except Exception:
+            return jsonify({"status": "ok", "modules": ["vision", "health", "drone", "wifi_defense", "ble_security", "mavlink"]})
+    
+    # ── Health Database (persistent SQLite) ──────────────
+
+    @api.route("/health/db/report", methods=["GET"])
+    def health_db_report():
+        """Full health report from SQLite DB — all metrics, trends, assessments."""
+        if not hasattr(raspi, 'health') or not raspi.health.health_db:
+            return jsonify({"error": "Health DB not available"}), 503
+        report = raspi.health.health_db.full_report()
+        return jsonify(report)
+
+    @api.route("/health/db/stats", methods=["GET"])
+    def health_db_stats():
+        """Database statistics — total readings, metrics, size."""
+        if not hasattr(raspi, 'health') or not raspi.health.health_db:
+            return jsonify({"error": "Health DB not available"}), 503
+        return jsonify(raspi.health.health_db.db_stats())
+
+    @api.route("/health/db/query", methods=["GET"])
+    def health_db_query():
+        """Query specific metric. Params: metric, hours (default 24), limit (default 100)."""
+        if not hasattr(raspi, 'health') or not raspi.health.health_db:
+            return jsonify({"error": "Health DB not available"}), 503
+        metric = request.args.get("metric", "heart_rate")
+        hours = request.args.get("hours", 24, type=int)
+        limit = request.args.get("limit", 100, type=int)
+        readings = raspi.health.health_db.get_range(metric, hours=hours, limit=limit)
+        stats = raspi.health.health_db.get_stats(metric, hours=hours)
+        return jsonify({"metric": metric, "hours": hours, "stats": stats, "readings": readings})
+
+    @api.route("/health/db/latest", methods=["GET"])
+    def health_db_latest():
+        """Get latest value for all metrics."""
+        if not hasattr(raspi, 'health') or not raspi.health.health_db:
+            return jsonify({"error": "Health DB not available"}), 503
+        from health_db import METRICS
+        result = {}
+        for m in METRICS:
+            latest = raspi.health.health_db.get_latest(m)
+            if latest:
+                result[m] = {"value": latest["value"], "unit": latest.get("unit", ""),
+                             "time": latest["datetime"]}
+        return jsonify(result)
+
+    @api.route("/health/db/daily", methods=["GET"])
+    def health_db_daily():
+        """Daily summaries for last N days (default 7)."""
+        if not hasattr(raspi, 'health') or not raspi.health.health_db:
+            return jsonify({"error": "Health DB not available"}), 503
+        days = request.args.get("days", 7, type=int)
+        # Update today summary first
+        raspi.health.health_db.update_daily_summary()
+        return jsonify(raspi.health.health_db.get_daily_summaries(days=days))
+
+    @api.route("/health/db/import", methods=["POST"])
+    def health_db_import():
+        """Import legacy health_log.json into SQLite DB."""
+        if not hasattr(raspi, 'health') or not raspi.health.health_db:
+            return jsonify({"error": "Health DB not available"}), 503
+        import os
+        json_path = os.path.expanduser("~/.tokio_health/health_log.json")
+        count = raspi.health.health_db.import_legacy_json(json_path)
+        return jsonify({"ok": True, "imported": count})
+
+    @api.route("/health/db/store", methods=["POST"])
+    def health_db_store():
+        """Manually store a health reading. Body: {metric, value, unit, notes}."""
+        if not hasattr(raspi, 'health') or not raspi.health.health_db:
+            return jsonify({"error": "Health DB not available"}), 503
+        data = request.get_json(force=True, silent=True) or {}
+        metric = data.get("metric")
+        value = data.get("value")
+        if not metric or value is None:
+            return jsonify({"error": "metric and value required"}), 400
+        unit = data.get("unit", "")
+        notes = data.get("notes")
+        source = data.get("source", "manual")
+        raspi.health.health_db.store(metric, float(value), unit, source=source, notes=notes)
+        return jsonify({"ok": True, "metric": metric, "value": value})
+
+    # return api.send_static_file("dashboard.html")  # FIXED: was outside route
 
     # --- Demo Flight ---
 
@@ -736,6 +820,7 @@ def create_api(app_instance: TokioRaspiApp) -> Flask:
         result = {
             "wifi": {},
             "ble": {},
+            "waf": {},
             "blocked_today": 0,
             "recent_attacks": [],
         }
@@ -768,6 +853,313 @@ def create_api(app_instance: TokioRaspiApp) -> Flask:
                     sec_status.get("flooding_detected", 0)
                 )
 
+        # WAF (SecurityFeed) stats
+        if hasattr(raspi, "security") and raspi.security.connected:
+            waf_stats = raspi.security.get_stats()
+            waf_events = raspi.security.get_events(limit=10)
+            result["waf"] = {
+                "connected": True,
+                "total_attacks": waf_stats.total_attacks,
+                "blocked": waf_stats.blocked,
+                "unique_ips": waf_stats.unique_ips,
+                "critical": waf_stats.critical,
+                "high": waf_stats.high,
+                "medium": waf_stats.medium,
+                "active_blocks": waf_stats.active_blocks,
+            }
+            result["blocked_today"] += waf_stats.blocked
+            # Merge WAF attacks into recent_attacks
+            for ev in waf_events[-5:]:
+                result["recent_attacks"].append({
+                    "timestamp": ev.timestamp,
+                    "source": "WAF",
+                    "ip": ev.ip,
+                    "method": ev.method,
+                    "uri": ev.uri,
+                    "severity": ev.severity,
+                    "blocked": ev.blocked,
+                    "threat_type": ev.threat_type or "unknown",
+                })
+
         return jsonify(result)
+
+
+    # ── BLE Security Monitor endpoints ──────────────
+
+    @api.route("/ble/security", methods=["GET"])
+    def ble_security_status():
+        """BLE attack detection status."""
+        if hasattr(raspi, "ble_security"):
+            return jsonify(raspi.ble_security.get_status())
+        return jsonify({"error": "BLE security monitor not available"}), 503
+
+    @api.route("/ble/devices", methods=["GET"])
+    def ble_devices():
+        """List detected BLE devices."""
+        if hasattr(raspi, "ble_security"):
+            return jsonify(raspi.ble_security.get_devices())
+        return jsonify([])
+
+    # ── WPA2 Monitor endpoints ──────────────
+
+    @api.route("/wpa2/status", methods=["GET"])
+    def wpa2_status():
+        """WPA2 attack detection status (handshake capture, PMKID, KRACK)."""
+        if hasattr(raspi, "wpa2_monitor"):
+            return jsonify(raspi.wpa2_monitor.get_status())
+        return jsonify({"error": "WPA2 monitor not available"}), 503
+
+    # ── WiFi Full Defense Report ──────────────
+
+    @api.route("/wifi/defense/full", methods=["GET"])
+    def wifi_defense_full():
+        """Complete WiFi + WPA2 defense report."""
+        result = {"wifi": {}, "wpa2": {}, "combined_attacks": 0}
+        if raspi.wifi_defense:
+            stats = raspi.wifi_defense.get_stats()
+            result["wifi"] = {
+                "monitoring": stats.monitoring,
+                "deauth_detected": stats.deauth_detected,
+                "evil_twins": stats.evil_twins,
+                "beacon_floods": stats.beacon_floods,
+                "mitigations": stats.mitigations_applied,
+                "recent": raspi.wifi_defense.get_attack_log(10),
+            }
+            result["combined_attacks"] += stats.deauth_detected + stats.evil_twins
+        if hasattr(raspi, "wpa2_monitor"):
+            wpa2 = raspi.wpa2_monitor.get_status()
+            result["wpa2"] = wpa2
+            result["combined_attacks"] += wpa2.get("handshake_captures_detected", 0)
+            result["combined_attacks"] += wpa2.get("pmkid_attempts", 0)
+        return jsonify(result)
+
+    # ── MAVLink Drone endpoints ──────────────
+
+    @api.route("/mavlink/status", methods=["GET"])
+    def mavlink_status():
+        """MAVLink drone status."""
+        if hasattr(raspi, "mavlink_drone"):
+            return jsonify(raspi.mavlink_drone.get_status())
+        return jsonify({"error": "MAVLink not available"}), 503
+
+    @api.route("/mavlink/connect", methods=["POST"])
+    def mavlink_connect():
+        """Connect to MAVLink drone."""
+        data = request.get_json(force=True, silent=True) or {}
+        conn_str = data.get("connection", "")
+        simulator = data.get("simulator", False)
+        if hasattr(raspi, "mavlink_drone"):
+            raspi.mavlink_drone._conn_str = conn_str
+            raspi.mavlink_drone._use_sim = simulator
+            ok = raspi.mavlink_drone.connect()
+            return jsonify({"ok": ok})
+        return jsonify({"error": "MAVLink not available"}), 503
+
+    @api.route("/mavlink/takeoff", methods=["POST"])
+    def mavlink_takeoff():
+        data = request.get_json(force=True, silent=True) or {}
+        alt = float(data.get("altitude", 5.0))
+        if hasattr(raspi, "mavlink_drone"):
+            return jsonify(raspi.mavlink_drone.takeoff(alt))
+        return jsonify({"error": "MAVLink not available"}), 503
+
+    @api.route("/mavlink/land", methods=["POST"])
+    def mavlink_land():
+        if hasattr(raspi, "mavlink_drone"):
+            return jsonify(raspi.mavlink_drone.land())
+        return jsonify({"error": "MAVLink not available"}), 503
+
+    @api.route("/mavlink/rtl", methods=["POST"])
+    def mavlink_rtl():
+        if hasattr(raspi, "mavlink_drone"):
+            return jsonify(raspi.mavlink_drone.rtl())
+        return jsonify({"error": "MAVLink not available"}), 503
+
+    @api.route("/mavlink/move", methods=["POST"])
+    def mavlink_move():
+        data = request.get_json(force=True, silent=True) or {}
+        direction = data.get("direction", "forward")
+        distance = float(data.get("distance", 2.0))
+        if hasattr(raspi, "mavlink_drone"):
+            return jsonify(raspi.mavlink_drone.move(direction, distance))
+        return jsonify({"error": "MAVLink not available"}), 503
+
+    @api.route("/mavlink/emergency", methods=["POST"])
+    def mavlink_emergency():
+        if hasattr(raspi, "mavlink_drone"):
+            return jsonify(raspi.mavlink_drone.emergency_stop())
+        return jsonify({"error": "MAVLink not available"}), 503
+
+    # ── Stand Mode (autonomous exhibit operation) ──────────────
+
+    @api.route("/mode", methods=["GET"])
+    def get_mode():
+        """Get current display mode."""
+        stand_active = hasattr(raspi, '_stand_engine') and raspi._stand_engine and raspi._stand_engine.active
+        return jsonify({
+            "mode": "stand" if stand_active else "normal",
+            "stand_active": stand_active,
+        })
+
+    @api.route("/mode/stand", methods=["POST"])
+    def set_stand_mode():
+        """Toggle stand mode — autonomous exhibit operation.
+        
+        When ON: Tokio greets visitors, shows stats, reports to Telegram.
+        When OFF: Normal private mode.
+        """
+        data = request.get_json(force=True, silent=True) or {}
+        enabled = data.get("enabled", True)
+        lang = data.get("lang", "es")
+
+        if not hasattr(raspi, '_stand_engine') or raspi._stand_engine is None:
+            try:
+                from .stand_mode import StandMode
+                raspi._stand_engine = StandMode(raspi)
+            except ImportError:
+                return jsonify({"error": "StandMode module not available"}), 500
+
+        if enabled:
+            raspi._stand_engine.start(lang=lang)
+            raspi._say("🎪 Stand mode ON. Autonomous operation.", (0, 255, 100))
+        else:
+            raspi._stand_engine.stop()
+            raspi._say("Stand mode OFF. Normal operation.", (0, 255, 255))
+        
+        return jsonify({"ok": True, "mode": "stand" if enabled else "normal"})
+
+    @api.route("/mode/stand/stats", methods=["GET"])
+    def stand_stats():
+        """Get stand mode visitor statistics."""
+        if not hasattr(raspi, '_stand_engine') or not raspi._stand_engine:
+            return jsonify({"active": False, "error": "Stand mode not initialized"})
+        return jsonify(raspi._stand_engine.stats)
+
+    # ── Extended Health (future sensors) ──────────────
+
+
+    # ── Event Store (persistent attack/threat history) ──────────────
+
+    @api.route("/events", methods=["GET"])
+    def get_events():
+        """Query stored events. Params: type, source, hours, limit."""
+        if not hasattr(raspi, 'event_store') or not raspi.event_store:
+            return jsonify({"error": "Event store not available"}), 503
+        event_type = request.args.get("type")
+        source = request.args.get("source")
+        hours = float(request.args.get("hours", 24))
+        limit = int(request.args.get("limit", 100))
+        events = raspi.event_store.get_events(event_type, source, hours, limit)
+        return jsonify(events)
+
+    @api.route("/events/stats", methods=["GET"])
+    def event_stats():
+        """Get event statistics."""
+        if not hasattr(raspi, 'event_store') or not raspi.event_store:
+            return jsonify({"error": "Event store not available"}), 503
+        hours = float(request.args.get("hours", 24))
+        return jsonify(raspi.event_store.get_stats(hours))
+
+    @api.route("/events/threats", methods=["GET"])
+    def threat_history():
+        """Get DEFCON threat level history."""
+        if not hasattr(raspi, 'event_store') or not raspi.event_store:
+            return jsonify({"error": "Event store not available"}), 503
+        hours = float(request.args.get("hours", 24))
+        return jsonify(raspi.event_store.get_threat_history(hours))
+
+    @api.route("/events/cleanup", methods=["POST"])
+    def cleanup_events():
+        """Clean up old events. Param: days (default 30)."""
+        if not hasattr(raspi, 'event_store') or not raspi.event_store:
+            return jsonify({"error": "Event store not available"}), 503
+        days = int(request.args.get("days", 30))
+        raspi.event_store.cleanup(days)
+        return jsonify({"ok": True, "cleaned_before_days": days})
+
+    @api.route("/health/extended", methods=["GET"])
+    def health_extended():
+        """Extended health metrics including future sensor placeholders."""
+        result = {"current": {}, "future_sensors": {}}
+        if hasattr(raspi, "health") and raspi.health.available:
+            data = raspi.health.data
+            result["current"] = {
+                "heart_rate": data.heart_rate,
+                "blood_pressure_sys": data.blood_pressure_sys,
+                "blood_pressure_dia": data.blood_pressure_dia,
+                "spo2": data.spo2,
+                "steps": data.steps,
+                "battery": data.battery,
+                "connected": data.connected,
+            }
+        result["future_sensors"] = {
+            "cholesterol": {"status": "planned", "unit": "mg/dL", "value": None},
+            "blood_sugar": {"status": "planned", "unit": "mg/dL", "value": None},
+            "uric_acid": {"status": "planned", "unit": "mg/dL", "value": None},
+            "hemoglobin": {"status": "planned", "unit": "g/dL", "value": None},
+            "body_temperature": {"status": "planned", "unit": "C", "value": None},
+        }
+        return jsonify(result)
+
+
+    # ── Threat Correlation Engine ──────────────
+
+    @api.route("/threat/status", methods=["GET"])
+    def threat_status():
+        """Get unified threat assessment."""
+        if hasattr(raspi, "threat_engine") and raspi.threat_engine:
+            return jsonify(raspi.threat_engine.get_state())
+        return jsonify({"level": 5, "level_name": "PEACE", "overall_score": 0,
+                        "vectors": {}, "insights": [], "auto_actions": []})
+
+    @api.route("/threat/push", methods=["POST"])
+    def threat_push_event():
+        """Push a security event into the correlation engine."""
+        if not hasattr(raspi, "threat_engine") or not raspi.threat_engine:
+            return jsonify({"error": "Threat engine not available"}), 503
+        data = request.get_json(force=True, silent=True) or {}
+        raspi.threat_engine.push_event(
+            data.get("vector", "waf"), data.get("severity", "medium"),
+            data.get("detail", ""), data.get("blocked", False))
+        return jsonify({"ok": True})
+
+    @api.route("/defense/status", methods=["GET"])
+    def defense_status():
+        """Get adaptive defense status."""
+        if hasattr(raspi, "adaptive_defense") and raspi.adaptive_defense:
+            return jsonify(raspi.adaptive_defense.get_status())
+        return jsonify({"current_level": 5, "total_actions": 0, "recent_actions": []})
+
+    @api.route("/defense/log", methods=["GET"])
+    def defense_log():
+        limit = request.args.get("limit", 50, type=int)
+        if hasattr(raspi, "adaptive_defense") and raspi.adaptive_defense:
+            return jsonify(raspi.adaptive_defense.get_log(limit))
+        return jsonify([])
+
+    @api.route("/security/full", methods=["GET"])
+    def security_full():
+        """Complete security overview — threat + WAF + WiFi + BLE + defense."""
+        import time as _time
+        result = {"timestamp": _time.time()}
+        if hasattr(raspi, "threat_engine") and raspi.threat_engine:
+            result["threat"] = raspi.threat_engine.get_state()
+        else:
+            result["threat"] = {"level": 5, "level_name": "PEACE"}
+        if raspi.security.connected:
+            result["waf"] = {"connected": True}
+        else:
+            result["waf"] = {"connected": False}
+        if raspi.wifi_defense:
+            stats = raspi.wifi_defense.get_stats()
+            result["wifi"] = {"monitoring": stats.monitoring,
+                              "deauth_detected": stats.deauth_detected,
+                              "evil_twins": stats.evil_twins,
+                              "counter_deauth": raspi.wifi_defense.counter_deauth}
+        if hasattr(raspi, "adaptive_defense") and raspi.adaptive_defense:
+            result["defense"] = raspi.adaptive_defense.get_status()
+        result["vision"] = {"persons": raspi._person_count}
+        return jsonify(result)
+
 
     return api

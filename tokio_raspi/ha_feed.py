@@ -48,11 +48,15 @@ class HAFeed:
             self._available = self._test_connection()
 
     def _try_generate_token(self):
-        """Try to construct JWT from HA auth storage."""
+        """Try to construct JWT from HA auth storage (fallback)."""
         try:
             import jwt
             auth_path = "/home/mrmoz/homeassistant/.storage/auth"
             if not os.path.isfile(auth_path):
+                print("[HAFeed] Auth file not found — set TOKIO_HA_TOKEN env var")
+                return
+            if not os.access(auth_path, os.R_OK):
+                print("[HAFeed] Cannot read auth file (permission denied) — set TOKIO_HA_TOKEN env var")
                 return
             with open(auth_path) as f:
                 data = json.load(f)
@@ -61,13 +65,13 @@ class HAFeed:
                     now = int(time.time())
                     payload = {"iss": t["id"], "iat": now, "exp": now + 315360000}
                     self._token = jwt.encode(payload, t["jwt_key"], algorithm="HS256")
-                    print(f"[HAFeed] Generated JWT from auth storage")
+                    print("[HAFeed] Generated JWT from auth storage")
                     return
-            print("[HAFeed] No TokioAI token found in HA auth storage")
+            print("[HAFeed] No TokioAI token in auth storage — set TOKIO_HA_TOKEN env var")
         except ImportError:
             print("[HAFeed] PyJWT not installed — set TOKIO_HA_TOKEN env var")
         except Exception as e:
-            print(f"[HAFeed] Token generation failed: {e}")
+            print(f"[HAFeed] Token fallback failed: {e}")
 
     def _test_connection(self) -> bool:
         if _requests is None:

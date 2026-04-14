@@ -18,12 +18,32 @@ from __future__ import annotations
 
 import json
 import os
-import readline
+import platform
 import subprocess
 import sys
 import textwrap
 import time
 from typing import Optional
+
+_IS_WINDOWS = platform.system() == "Windows"
+if _IS_WINDOWS:
+    try:
+        import pyreadline3 as readline  # type: ignore
+    except ImportError:
+        import readline  # type: ignore
+else:
+    import readline
+    import termios
+    import tty
+
+def _restore_terminal():
+    """Restore terminal to sane state after tool execution."""
+    if _IS_WINDOWS:
+        return
+    try:
+        os.system("stty sane 2>/dev/null")
+    except Exception:
+        pass
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -39,10 +59,10 @@ SSH_RASPI = os.path.expanduser("~/.ssh/id_rsa_raspberry")
 SSH_GCP = os.path.expanduser("~/.ssh/google_compute_engine")
 
 # Hosts — configure via env vars or .env file
-RASPI_IP = os.getenv("RASPI_IP", "")
+RASPI_IP = os.getenv("RASPI_IP", "192.168.8.161")
 RASPI_TS = os.getenv("RASPI_TAILSCALE_IP", "")
 RASPI_USER = os.getenv("RASPI_SSH_USER", "mrmoz")
-GCP_IP = os.getenv("GCP_SSH_HOST", "")
+GCP_IP = os.getenv("GCP_SSH_HOST", "35.225.133.230")
 GCP_USER = os.getenv("GCP_SSH_USER", "osboxes")
 ROUTER_IP = os.getenv("ROUTER_IP", "")
 
@@ -650,6 +670,7 @@ class TokioOps:
                     if block.type == "tool_use":
                         print_tool_call(block)
                         result = execute_tool(block.name, block.input)
+                        _restore_terminal()
 
                         # Show truncated result for visibility
                         result_preview = result[:200].replace("\n", " ")
@@ -708,6 +729,100 @@ def _save_history():
         pass
 
 
+def _handle_slash(cmd: str) -> Optional[str]:
+    """Handle slash commands without LLM."""
+    cmd = cmd.strip().lower()
+
+    try:
+        if cmd == "/status":
+            lines = [f"{C_BOLD}=== System Status ==={C_RESET}"]
+            # Entity
+            try:
+                r = _run_cmd("curl -s --connect-timeout 3 http://100.100.80.12:5000/status", 5)
+                d = json.loads(r)
+                fps = d.get("vision", {}).get("fps", 0)
+                cam = "✅" if d.get("vision", {}).get("camera_open") else "❌"
+                hailo = "✅" if d.get("vision", {}).get("hailo_available") else "❌"
+                lines.append(f"  Entity: {cam} Camera | {hailo} Hailo | {fps:.1f} FPS")
+            except Exception:
+                lines.append("  Entity: ❌ offline")
+            # GCP
+            try:
+                r = _gcp_cmd("sudo docker ps --format '{{.Names}}:{{.Status}}' | wc -l", 10)
+                lines.append(f"  GCP: {r.strip()} containers running")
+            except Exception:
+                lines.append("  GCP: ❌ unreachable")
+            # PiCar
+            try:
+                r = _run_cmd("curl -s --connect-timeout 3 http://192.168.8.107:5002/status", 5)
+                d = json.loads(r)
+                bat = d.get("battery_v", "?")
+                ultra = d.get("ultrasonic_cm", "?")
+                lines.append(f"  PiCar: ✅ Battery {bat}V | Ultrasonic {ultra}cm")
+            except Exception:
+                lines.append("  PiCar: ❌ offline")
+            return "\n".join(lines)
+
+        elif cmd == "/entity":
+            r = _run_cmd("curl -s --connect-timeout 3 http://100.100.80.12:5000/status", 5)
+            d = json.loads(r)
+            v = d.get("vision", {})
+            return (f"Entity: Camera={'✅' if v.get('camera_open') else '❌'} "
+                    f"Hailo={'✅' if v.get('hailo_available') else '❌'} "
+                    f"FPS={v.get('fps', 0):.1f} "
+                    f"Faces={d.get('faces_known', 0)} "
+                    f"Persons={d.get('persons_detected', 0)} "
+                    f"Emotion={d.get('emotion', '?')}")
+
+        elif cmd == "/picar":
+            r = _run_cmd("curl -s --connect-timeout 3 http://192.168.8.107:5002/status", 5)
+            d = json.loads(r)
+            return (f"PiCar-X: HW={'✅' if d.get('initialized') else '❌'} "
+                    f"Battery={d.get('battery_v', '?')}V "
+                    f"Ultrasonic={d.get('ultrasonic_cm', '?')}cm "
+                    f"Moving={'🟢' if d.get('moving') else '⚪'} "
+                    f"Cmds={d.get('commands', 0)}")
+
+        elif cmd == "/waf":
+            r = _gcp_cmd("python3 -c 'import urllib.request,json,os; "
+                         "pw=open(\"/opt/tokioai-v2/.env\").read().split(\"DASHBOARD_PASSWORD=\")[1].split(chr(10))[0]; "
+                         "rq=urllib.request.Request(\"http://localhost:8000/api/auth/login\",data=json.dumps({\"username\":\"admin\",\"password\":pw}).encode(),headers={\"Content-Type\":\"application/json\"}); "
+                         "tk=json.load(urllib.request.urlopen(rq))[\"token\"]; "
+                         "rq2=urllib.request.Request(\"http://localhost:8000/api/summary\",headers={\"Authorization\":\"Bearer \"+tk}); "
+                         "print(json.dumps(json.load(urllib.request.urlopen(rq2))))'", 15)
+            d = json.loads(r)
+            return (f"WAF: {d.get('total', '?')} attacks | "
+                    f"{d.get('blocked', '?')} blocked | "
+                    f"{d.get('active_blocks', '?')} active blocks | "
+                    f"Critical: {d.get('critical', '?')} High: {d.get('high', '?')}")
+
+        elif cmd == "/health":
+            r = _run_cmd("curl -s --connect-timeout 3 http://100.100.80.12:5000/health/report", 5)
+            d = json.loads(r)
+            cur = d.get("current", {})
+            lines = [f"{C_BOLD}=== Health ==={C_RESET}"]
+            if cur.get("heart_rate"):
+                lines.append(f"  ❤️  HR: {cur['heart_rate']} bpm")
+            if cur.get("blood_pressure"):
+                lines.append(f"  🩸 BP: {cur['blood_pressure']} mmHg")
+            if cur.get("spo2"):
+                lines.append(f"  🫁 SpO2: {cur['spo2']}%")
+            if cur.get("steps"):
+                lines.append(f"  🚶 Steps: {cur['steps']}")
+            lines.append(f"  📊 {d.get('assessment', '?')}")
+            return "\n".join(lines)
+
+        elif cmd == "/gcp":
+            r = _gcp_cmd("sudo docker ps --format 'table {{.Names}}\t{{.Status}}' | head -12", 10)
+            return f"{C_BOLD}=== GCP Containers ==={C_RESET}\n{r}"
+
+        else:
+            return f"{C_DIM}Unknown command: {cmd}. Type 'help' for commands.{C_RESET}"
+
+    except Exception as e:
+        return f"{C_RED}Error: {e}{C_RESET}"
+
+
 def main():
     ops = TokioOps()
     _load_history()
@@ -729,7 +844,7 @@ def main():
   Powered by Claude | Model: {VERTEX_MODEL}
 {'=' * 56}{C_RESET}
 
-{C_DIM}Commands: exit, reset, compact, tokens, diagnose [target]{C_RESET}
+{C_DIM}Commands: help, exit, reset, compact, tokens, /status, /entity, /picar, /waf, /health, /gcp{C_RESET}
 """)
 
     while True:
@@ -756,6 +871,29 @@ def main():
         if user_input.lower() == "tokens":
             print(f"{C_DIM}{ops.token_usage()}{C_RESET}")
             continue
+        if user_input.lower() == "help":
+            print(f"""
+{C_BOLD}Commands:{C_RESET}
+  {C_CYAN}exit{C_RESET}     — Quit
+  {C_CYAN}reset{C_RESET}    — Clear conversation
+  {C_CYAN}compact{C_RESET}  — Keep last 4 messages
+  {C_CYAN}tokens{C_RESET}   — Show token usage
+  {C_CYAN}/status{C_RESET}  — Quick system status (Entity + GCP)
+  {C_CYAN}/entity{C_RESET}  — Entity status
+  {C_CYAN}/picar{C_RESET}   — PiCar-X robot status
+  {C_CYAN}/waf{C_RESET}     — WAF stats
+  {C_CYAN}/health{C_RESET}  — Health vitals
+  {C_CYAN}/gcp{C_RESET}     — GCP containers
+  {C_CYAN}diagnose{C_RESET} — Diagnostic target
+""")
+            continue
+
+        # Slash commands — quick status checks without using LLM
+        if user_input.startswith("/"):
+            result = _handle_slash(user_input)
+            if result is not None:
+                print(result)
+                continue
 
         # Quick shortcuts
         if user_input.lower().startswith("diagnose"):
@@ -765,12 +903,24 @@ def main():
             user_input = f"Run a full diagnostic on {target}" + (f" focusing on {focus}" if focus else "")
 
         t0 = time.time()
-        response = ops.chat(user_input)
+        try:
+            response = ops.chat(user_input)
+        except KeyboardInterrupt:
+            _restore_terminal()
+            print(f"\n{C_DIM}Interrupted.{C_RESET}")
+            continue
+        except Exception as e:
+            _restore_terminal()
+            print(f"\n{C_RED}Error: {e}{C_RESET}")
+            continue
+        finally:
+            _restore_terminal()
         elapsed = time.time() - t0
         print(f"\n{response}")
         print(f"\n{C_DIM}[{elapsed:.1f}s | {ops.token_usage()}]{C_RESET}\n")
 
     _save_history()
+    _restore_terminal()
 
 
 if __name__ == "__main__":

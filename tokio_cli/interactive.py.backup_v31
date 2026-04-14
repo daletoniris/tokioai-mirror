@@ -1,19 +1,15 @@
 #!/usr/bin/env python3
 """
-TokioAI Interactive CLI v3.3 — Pro Terminal Interface.
+TokioAI Interactive CLI — Pro Terminal Interface.
 
 Features:
 - Rich markdown rendering (headers, bold, code blocks, tables, lists)
 - Gradient banner with system info
 - Styled tool calls with icons & progress
-- Status bar with token/tool/time/cost tracking
+- Status bar with token/tool/time tracking
 - Streaming responses (token by token)
 - Escape to cancel running requests
 - readline history & session persistence
-- 14 slash commands (instant, no LLM)
-- Tab completion for commands, tools, slash commands
-- Multi-line input with backslash continuation
-- Cross-platform: Linux, macOS, Windows
 
 Usage:
     python3 -m tokio_cli                    # interactive mode
@@ -34,9 +30,6 @@ import signal
 import sys
 import time
 import warnings
-import json as _json
-import subprocess as _sp
-from typing import Optional
 
 _IS_WINDOWS = platform.system() == "Windows"
 
@@ -59,6 +52,7 @@ else:
     import select
     import termios
     import tty
+from typing import Optional
 
 # Suppress asyncio child process reap warnings (cosmetic, happens on cancel)
 warnings.filterwarnings("ignore", message="child process pid.*exit status already read")
@@ -117,9 +111,9 @@ SESSION_FILE = os.path.expanduser("~/.tokio_cli_session.json")
 
 _CLI_COMMANDS = [
     "exit", "quit", "help", "reset", "stats", "tools", "model", "clear",
-    "unlimited", "persistent", "stop", "config",
+    "unlimited", "persistent", "stop",
     "/status", "/waf", "/health", "/drone", "/threats", "/entity",
-    "/sitrep", "/see", "/containers", "/wifi", "/coffee", "/logs", "/ha", "/picar",
+    "/sitrep", "/see", "/containers",
 ]
 
 _TOOL_NAMES: list[str] = []  # populated after agent creation
@@ -140,9 +134,13 @@ def _load_history():
         readline.set_completer(_completer)
         readline.parse_and_bind('tab: complete')
         readline.set_completer_delims(' \t\n')
+        # Let readline wrap long lines normally — \001/\002 markers handle width calc
         readline.parse_and_bind('set horizontal-scroll-mode off')
+        # Better paste handling — treat pasted text as a single unit
         readline.parse_and_bind('set enable-bracketed-paste on')
+        # Don't ring bell on wrap/complete
         readline.parse_and_bind('set bell-style none')
+        # Ensure proper multi-line editing
         readline.parse_and_bind('set show-all-if-ambiguous on')
     except Exception:
         pass
@@ -158,6 +156,7 @@ def _save_history():
 
 def _save_session_state(sid: str, last_messages: list):
     """Save session state to disk so it persists across CLI restarts."""
+    import json
     try:
         recent = last_messages[-20:] if last_messages else []
         state = {
@@ -166,17 +165,18 @@ def _save_session_state(sid: str, last_messages: list):
             "messages": recent,
         }
         with open(SESSION_FILE, "w") as f:
-            _json.dump(state, f, indent=2, ensure_ascii=False)
+            json.dump(state, f, indent=2, ensure_ascii=False)
     except Exception:
         pass
 
 
 def _load_session_state():
     """Load previous session state from disk."""
+    import json
     try:
         if os.path.exists(SESSION_FILE):
             with open(SESSION_FILE, "r") as f:
-                state = _json.load(f)
+                state = json.load(f)
             ts = state.get("timestamp", "")
             if ts:
                 from datetime import datetime, timedelta
@@ -194,6 +194,7 @@ def _load_session_state():
 class MarkdownRenderer:
     """Renders markdown-like text with ANSI colors for terminal."""
 
+    # Patterns for inline rendering
     _BOLD = re.compile(r'\*\*(.+?)\*\*')
     _ITALIC = re.compile(r'(?<!\*)\*([^*]+?)\*(?!\*)')
     _INLINE_CODE = re.compile(r'`([^`\n]+?)`')
@@ -278,23 +279,20 @@ class MarkdownRenderer:
                 continue
 
             # Table row
-            if '|' in line and not line.strip().startswith('```'):
-                cells = [c.strip() for c in line.strip().strip('|').split('|')]
+            if '|' in line and line.strip().startswith('|'):
+                cells = [c.strip() for c in line.strip('|').split('|')]
                 if all(re.match(r'^[-:]+$', c) for c in cells if c):
-                    continue  # separator row
-                w = min(_term_width() - 4, 80)
-                # Determine available width per cell
-                num_cells = len(cells)
-                if num_cells > 0:
-                    cell_width = max(8, (w - num_cells * 3) // num_cells)
-                    formatted = []
-                    for c in cells:
-                        rendered = cls._render_inline(c)
-                        formatted.append(rendered)
-                    result.append(f"  {C_DIM}│{C_RESET} " + f" {C_DIM}│{C_RESET} ".join(formatted) + f" {C_DIM}│{C_RESET}")
+                    # Separator row
+                    result.append(f"  {C_DIM}{'─' * 50}{C_RESET}")
+                    continue
+                row_parts = []
+                for cell in cells:
+                    rendered = cls._render_inline(cell)
+                    row_parts.append(f" {rendered} ")
+                result.append(f"  {C_DIM}│{C_RESET}{f'{C_DIM}│{C_RESET}'.join(row_parts)}{C_DIM}│{C_RESET}")
                 continue
 
-            # Regular text
+            # Normal text with inline rendering
             rendered = cls._render_inline(line)
             result.append(rendered)
 
@@ -303,10 +301,15 @@ class MarkdownRenderer:
     @classmethod
     def _render_inline(cls, text: str) -> str:
         """Apply inline markdown formatting."""
+        # Links [text](url)
         text = cls._LINK.sub(f'{C_UNDERLINE}{C_BRIGHT_BLUE}\\1{C_RESET}{C_DIM} (\\2){C_RESET}', text)
+        # Bold
         text = cls._BOLD.sub(f'{C_BOLD}\\1{C_RESET}', text)
+        # Italic
         text = cls._ITALIC.sub(f'{C_ITALIC}\\1{C_RESET}', text)
+        # Inline code
         text = cls._INLINE_CODE.sub(f'{C_BG_GRAY}{C_BRIGHT_GREEN} \\1 {C_RESET}', text)
+        # Strikethrough
         text = cls._STRIKETHROUGH.sub(f'{C_DIM}\\1{C_RESET}', text)
         return text
 
@@ -371,13 +374,9 @@ def _check_escape() -> bool:
                 ch = msvcrt.getch()
                 return ch == b'\x1b'
         else:
-            rlist, _, _ = select.select([sys.stdin], [], [], 0)
-            if rlist:
-                ch = os.read(sys.stdin.fileno(), 1)
-                return ch == b'\x1b'
-    except (OSError, IOError, ValueError):
-        # fd closed or invalid — don't crash
-        pass
+            if select.select([sys.stdin], [], [], 0)[0]:
+                ch = sys.stdin.read(1)
+                return ch == '\x1b'
     except Exception:
         pass
     return False
@@ -405,6 +404,10 @@ _SENSITIVE_PATTERNS = [
     (re.compile(r'sk-[A-Za-z0-9]{20,}'), '[API_KEY]'),
     (re.compile(r'AIza[A-Za-z0-9_-]{35}'), '[GOOGLE_API_KEY]'),
     (re.compile(r'AKIA[A-Z0-9]{16}'), '[AWS_KEY]'),
+    (re.compile(r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b'), '[IP]'),
+    (re.compile(r'\b\w+@\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b'), '[USER@HOST]'),
+    (re.compile(r'\b\w+@[\w.-]+\.\w+\b'), '[USER@HOST]'),
+    (re.compile(r'ssh\s+-i\s+\S+'), 'ssh -i [KEY]'),
     (re.compile(r'TELEGRAM_BOT_TOKEN=\S+'), 'TELEGRAM_BOT_TOKEN=[REDACTED]'),
     (re.compile(r'POSTGRES_PASSWORD=\S+'), 'POSTGRES_PASSWORD=[REDACTED]'),
     (re.compile(r'ANTHROPIC_API_KEY=\S+'), 'ANTHROPIC_API_KEY=[REDACTED]'),
@@ -481,32 +484,23 @@ def _format_tool_start(name: str, args: dict, tool_num: int) -> str:
 
 
 def _format_tool_result(name: str, output: str, success: bool = True) -> str:
-    """Format tool result with smart truncation."""
+    """Format tool result with visual indicator."""
     if not output or not output.strip():
-        return f"    {C_BRIGHT_GREEN}✓{C_RESET} {C_DIM}(empty){C_RESET}"
+        return f"    {C_BRIGHT_GREEN}✓{C_RESET} {C_GRAY}done{C_RESET}"
 
-    out = output.strip()
-    lines = out.split('\n')
-    line_count = len(lines)
+    preview = _mask_sensitive(output.strip().replace("\n", " ")[:150])
+    truncated = '…' if len(output.strip()) > 150 else ''
 
-    # Count chars
-    char_count = len(out)
-
-    # Status icon
-    icon = f"{C_BRIGHT_GREEN}✓{C_RESET}" if success else f"{C_BRIGHT_RED}✗{C_RESET}"
-
-    # Smart summary
-    if char_count < 200 and line_count <= 3:
-        preview = out.replace('\n', ' ↵ ')[:150]
-        return f"    {icon} {C_DIM}{preview}{C_RESET}"
+    if success:
+        return f"    {C_BRIGHT_GREEN}✓{C_RESET} {C_GRAY}{preview}{truncated}{C_RESET}"
     else:
-        # Show first and last line with count
-        first = lines[0][:80]
-        size = f"{char_count:,} chars" if char_count < 10000 else f"{char_count/1000:.0f}K chars"
-        return f"    {icon} {C_DIM}{first}{'…' if len(lines[0]) > 80 else ''} ({line_count} lines, {size}){C_RESET}"
+        return f"    {C_BRIGHT_RED}✗{C_RESET} {C_GRAY}{preview}{truncated}{C_RESET}"
 
 
 # ─── Slash Commands (instant, no LLM) ────────────────
+
+import subprocess as _sp
+import json as _json
 
 # Load host config from env (same as tokio_ops)
 _RASPI_IP = os.getenv("RASPI_IP", "192.168.8.161")
@@ -541,16 +535,6 @@ def _quick_ssh(host: str, key: str, user: str, cmd: str, timeout: int = 8) -> Op
         return None
 
 
-def _check_raspi_reachable() -> bool:
-    """Quick check if Raspi responds."""
-    try:
-        r = _sp.run(["curl", "-s", "--connect-timeout", "2", f"http://{_RASPI_TS}:5000/status"],
-                     capture_output=True, text=True, timeout=4)
-        return r.returncode == 0 and r.stdout.strip().startswith('{')
-    except Exception:
-        return False
-
-
 def _slash_status():
     """Quick system status."""
     print(f"\n  {C_BOLD}🛡️ TokioAI Quick Status{C_RESET}\n")
@@ -559,12 +543,7 @@ def _slash_status():
     data = _quick_curl(f"http://{_RASPI_TS}:5000/status")
     if data:
         v = data.get("vision", {})
-        fps = v.get('fps', '?')
-        hailo = '✅' if v.get('hailo_available', v.get('hailo_active')) else '❌'
-        persons = data.get('persons_detected', 0)
-        emotion = data.get('emotion', '?')
-        sec = '🔒' if data.get('security_connected') else '🔓'
-        print(f"  👁️  Entity:  {C_BRIGHT_GREEN}✅{C_RESET} {fps} FPS | Hailo {hailo} | {persons} persons | {emotion} {sec}")
+        print(f"  👁️  Entity:  {C_BRIGHT_GREEN}✅{C_RESET} {v.get('fps','?')} FPS | Hailo {'✅' if v.get('hailo_available', v.get('hailo_active')) else '❌'} | {data.get('persons_detected',0)} persons | {data.get('emotion','?')}")
     else:
         print(f"  👁️  Entity:  {C_BRIGHT_RED}❌ offline{C_RESET}")
 
@@ -587,13 +566,6 @@ def _slash_status():
     out = _quick_ssh(_GCP_IP, _SSH_GCP, "osboxes", "sudo docker ps --format '{{.Names}}' 2>/dev/null | wc -l")
     if out:
         print(f"  🐳 Docker:  {C_BRIGHT_GREEN}✅{C_RESET} {out.strip()} containers running")
-
-    # Home Assistant
-    data = _quick_curl(f"http://{_RASPI_TS}:5000/status")
-    if data and data.get('ha_connected'):
-        print(f"  🏠 HA:      {C_BRIGHT_GREEN}✅{C_RESET} connected")
-    elif data:
-        print(f"  🏠 HA:      {C_BRIGHT_YELLOW}⚠️ disconnected{C_RESET}")
 
     print()
 
@@ -619,17 +591,14 @@ def _slash_waf():
         return
     try:
         d = _json.loads(out)
-        total = d.get('total', 0)
-        blocked = d.get('blocked', 0)
-        block_rate = (blocked / total * 100) if total > 0 else 0
-        print(f"  Total attacks:   {C_BOLD}{total:,}{C_RESET}")
-        print(f"  Blocked:         {C_BOLD}{blocked:,}{C_RESET} ({block_rate:.1f}%)")
-        print(f"  Active IP bans:  {C_BOLD}{d.get('active_blocks', 0)}{C_RESET}")
-        print(f"  Unique IPs:      {d.get('unique_ips', 0):,}")
-        print(f"  {C_BRIGHT_RED}Critical{C_RESET}:        {d.get('critical', 0):,}")
-        print(f"  {C_BRIGHT_YELLOW}High{C_RESET}:            {d.get('high', 0):,}")
-        print(f"  Medium:          {d.get('medium', 0):,}")
-        print(f"  Low:             {d.get('low', 0):,}")
+        print(f"  Total attacks:   {C_BOLD}{d.get('total',0):,}{C_RESET}")
+        print(f"  Blocked:         {C_BOLD}{d.get('blocked',0):,}{C_RESET}")
+        print(f"  Active IP bans:  {C_BOLD}{d.get('active_blocks',0)}{C_RESET}")
+        print(f"  Unique IPs:      {d.get('unique_ips',0):,}")
+        print(f"  Critical:        {C_BRIGHT_RED}{d.get('critical',0):,}{C_RESET}")
+        print(f"  High:            {C_BRIGHT_YELLOW}{d.get('high',0):,}{C_RESET}")
+        print(f"  Medium:          {d.get('medium',0):,}")
+        print(f"  Low:             {d.get('low',0):,}")
     except Exception:
         print(f"  {C_BRIGHT_RED}❌ Parse error{C_RESET}")
     print()
@@ -652,17 +621,14 @@ def _slash_health():
     battery = data.get("battery", "?")
 
     status = f"{C_BRIGHT_GREEN}✅ connected{C_RESET}" if connected else f"{C_BRIGHT_YELLOW}⏳ waiting{C_RESET}"
-    print(f"  Watch:       {status} ({data.get('watch', '?')}) 🔋{battery}%")
-    hr_color = C_BRIGHT_RED if isinstance(hr, (int, float)) and (hr > 120 or hr < 45) else C_BOLD
+    print(f"  Watch:       {status} ({data.get('watch','?')}) 🔋{battery}%")
     hr_str = str(hr) if hr else "waiting..."
-    print(f"  Heart Rate:  {hr_color}{hr_str}{C_RESET} bpm")
-    spo2_color = C_BRIGHT_RED if isinstance(spo2, (int, float)) and spo2 < 92 else C_BOLD
+    print(f"  Heart Rate:  {C_BOLD}{hr_str}{C_RESET} bpm")
     spo2_str = str(spo2) if spo2 else "waiting..."
-    print(f"  SpO2:        {spo2_color}{spo2_str}{C_RESET}%")
+    print(f"  SpO2:        {C_BOLD}{spo2_str}{C_RESET}%")
     if bp_sys and bp_dia:
-        bp_color = C_BRIGHT_RED if bp_sys > 140 else C_BOLD
-        print(f"  Blood Press: {bp_color}{bp_sys}/{bp_dia}{C_RESET} mmHg")
-    print(f"  Steps:       {steps:,} | Calories: {calories}")
+        print(f"  Blood Press: {C_BOLD}{bp_sys}/{bp_dia}{C_RESET} mmHg")
+    print(f"  Steps:       {steps} | Calories: {calories}")
     print()
 
 
@@ -676,28 +642,17 @@ def _slash_threats():
     defcon = data.get("level", data.get("defcon", "?"))
     colors = {"1": C_BRIGHT_RED, "2": C_BRIGHT_RED, "3": C_BRIGHT_YELLOW, "4": C_BRIGHT_BLUE, "5": C_BRIGHT_GREEN}
     c = colors.get(str(defcon), C_DIM)
-    level_name = data.get("level_name", "?")
-    print(f"  DEFCON:  {c}{C_BOLD}{defcon}{C_RESET} — {level_name}")
-    print(f"  Score:   {data.get('overall_score', data.get('score', '?'))}")
-
-    # Correlations
-    corr = data.get("active_correlations", [])
-    if corr:
-        print(f"  {C_BRIGHT_RED}⚡ Active Correlations:{C_RESET}")
-        for cr in corr[:3]:
-            print(f"    → {cr}")
-
+    print(f"  DEFCON:  {c}{C_BOLD}{defcon}{C_RESET} — {data.get('level_name','?')}")
+    print(f"  Score:   {data.get('overall_score', data.get('score','?'))}")
     vecs = data.get("vectors", data.get("threat_vectors", {}))
     if vecs:
         print(f"  Vectors:")
-        vec_icons = {"waf": "🛡️", "wifi": "📡", "ble": "📱", "vision": "👁️"}
         for v, info in vecs.items():
-            icon = vec_icons.get(v, "•")
             name = info.get("name", v)
             score = info.get("score", "?")
             evts = info.get("events_1h", 0)
             detail = info.get("last_detail", "")
-            line = f"    {icon} {name}: score {score}"
+            line = f"    {name}: score {score}"
             if evts:
                 line += f" ({evts} events/1h)"
             if detail:
@@ -711,30 +666,16 @@ def _slash_drone():
     print(f"\n  {C_BOLD}🚁 Drone Status{C_RESET}\n")
     data = _quick_curl(f"http://{_RASPI_TS}:5001/drone/status")
     if not data:
-        print(f"  {C_DIM}Drone proxy offline — Raspi may be down{C_RESET}\n")
+        print(f"  {C_DIM}Drone proxy not responding{C_RESET}\n")
         return
-    connected = data.get("connected", False)
-    flying = data.get("is_flying", False)
-    bat = data.get("battery", "?")
-    safety = data.get("safety_level", "?")
+    fly = f"{C_BRIGHT_GREEN}✈️ FLYING{C_RESET}" if data.get("is_flying") else f"{C_DIM}🔋 grounded{C_RESET}"
+    print(f"  Status:    {fly}")
+    print(f"  Safety:    {data.get('safety_level','?')}")
+    print(f"  Battery:   {data.get('battery','?')}%")
+    print(f"  Kill SW:   {'🔴 ACTIVE' if data.get('killed') else '🟢 normal'}")
     geo = data.get("geofence", {})
-    wifi = data.get("wifi_connected", False)
-
-    if flying:
-        print(f"  Status:    {C_BRIGHT_GREEN}✈️ FLYING{C_RESET}")
-    elif connected:
-        print(f"  Status:    {C_BRIGHT_GREEN}✅ connected{C_RESET}")
-    elif wifi:
-        print(f"  Status:    {C_BRIGHT_YELLOW}📶 WiFi connected, SDK pending{C_RESET}")
-    else:
-        print(f"  Status:    {C_DIM}❌ disconnected{C_RESET}")
-    print(f"  Battery:   {bat}%")
-    print(f"  Safety:    {safety}")
     if geo:
-        print(f"  Geofence:  {geo.get('max_height', '?')}cm H × {geo.get('max_distance', '?')}cm D")
-    fpv = data.get("fpv", {})
-    if fpv:
-        print(f"  FPV:       {'✅ active' if fpv.get('active') else '❌ off'}")
+        print(f"  Geofence:  {geo.get('max_distance','?')}cm max")
     print()
 
 
@@ -742,19 +683,16 @@ def _slash_containers():
     """Quick GCP container list."""
     print(f"\n  {C_BOLD}🐳 GCP Containers{C_RESET}\n")
     out = _quick_ssh(_GCP_IP, _SSH_GCP, "osboxes",
-        "sudo docker ps --format '{{.Names}}|{{.Status}}|{{.Ports}}' 2>/dev/null")
+        "sudo docker ps --format '{{.Names}}\t{{.Status}}\t{{.Ports}}' 2>/dev/null", timeout=10)
     if not out:
-        print(f"  {C_BRIGHT_RED}❌ Cannot reach GCP{C_RESET}\n")
+        print(f"  {C_BRIGHT_RED}❌ GCP unreachable{C_RESET}\n")
         return
-    for line in out.strip().split('\n'):
-        parts = line.split('|')
-        if len(parts) >= 2:
-            name = parts[0]
-            status = parts[1]
-            icon = "🟢" if "Up" in status else "🔴"
-            # Clean up status
-            status_clean = status.replace("(healthy)", f"{C_BRIGHT_GREEN}(healthy){C_RESET}")
-            print(f"  {icon} {C_BRIGHT_CYAN}{name:<28}{C_RESET} {status_clean}")
+    for line in out.strip().split("\n"):
+        parts = line.split("\t")
+        name = parts[0] if len(parts) > 0 else "?"
+        status = parts[1] if len(parts) > 1 else "?"
+        icon = "🟢" if "Up" in status else "🔴"
+        print(f"  {icon} {C_BRIGHT_CYAN}{name:<35}{C_RESET} {C_GRAY}{status}{C_RESET}")
     print()
 
 
@@ -767,180 +705,21 @@ def _slash_entity():
         return
     v = data.get("vision", {})
     print(f"  Camera:    {'✅' if v.get('camera_open', v.get('camera_ok')) else '❌'}")
-    print(f"  Hailo:     {'✅ AI accelerated' if v.get('hailo_available', v.get('hailo_active')) else '❌ CPU only'}")
-    print(f"  FPS:       {C_BOLD}{v.get('fps', '?')}{C_RESET}")
-    print(f"  Persons:   {data.get('persons_detected', '?')}")
-    print(f"  Emotion:   {data.get('emotion', '?')}")
-    print(f"  Security:  {'✅ connected' if data.get('security_connected') else '❌ disconnected'}")
-    print(f"  HA:        {'✅ connected' if data.get('ha_connected') else '❌ disconnected'}")
-    ai = data.get("ai_brain", {})
-    if ai:
-        print(f"  AI Brain:  {'✅' if ai.get('active') else '❌'} | {ai.get('observations', 0)} observations")
-    stand = data.get("stand_mode", {})
-    if stand and stand.get("active"):
-        print(f"  Stand:     {C_BRIGHT_YELLOW}✅ ACTIVE{C_RESET} | {stand.get('visitors', 0)} visitors")
-    print()
-
-
-def _slash_wifi():
-    """Quick WiFi defense status."""
-    print(f"\n  {C_BOLD}📡 WiFi Defense{C_RESET}\n")
-    data = _quick_curl(f"http://{_RASPI_TS}:5000/wifi/status")
-    if not data:
-        print(f"  {C_DIM}WiFi defense not responding{C_RESET}\n")
-        return
-    monitoring = data.get("monitoring", False)
-    counter = data.get("counter_deauth", data.get("counter_deauth_enabled", False))
-    deauths = data.get("deauth_count", data.get("deauths_detected", 0))
-    evil = data.get("evil_twins", data.get("evil_twins_detected", 0))
-    channel = data.get("current_channel", "?")
-    interface = data.get("interface", data.get("monitor_interface", "?"))
-
-    print(f"  Monitoring:      {'✅ active' if monitoring else '❌ off'}")
-    print(f"  Interface:       {interface}")
-    print(f"  Channel:         {channel}")
-    print(f"  Counter-deauth:  {'✅ ON' if counter else '❌ OFF'}")
-    print(f"  Deauths found:   {C_BRIGHT_RED if deauths > 0 else C_DIM}{deauths}{C_RESET}")
-    print(f"  Evil twins:      {C_BRIGHT_RED if evil > 0 else C_DIM}{evil}{C_RESET}")
-    attacks = data.get("recent_attacks", [])
-    if attacks:
-        print(f"\n  Recent attacks:")
-        for a in attacks[:5]:
-            ts = a.get("time", a.get("timestamp", "?"))
-            atype = a.get("type", "?")
-            print(f"    {C_DIM}{ts}{C_RESET} {C_BRIGHT_RED}{atype}{C_RESET}")
-    print()
-
-
-def _slash_coffee():
-    """Quick coffee machine status."""
-    print(f"\n  {C_BOLD}☕ Coffee Machine{C_RESET}\n")
-    data = _quick_curl(f"http://{_RASPI_TS}:5000/coffee/status")
-    if not data:
-        print(f"  {C_DIM}Coffee API not available{C_RESET}\n")
-        return
-    status = data.get("status", "unknown")
-    ready = data.get("ready", False)
-    last = data.get("last_brew", {})
-    print(f"  Status:     {'✅ ready' if ready else f'⏳ {status}'}")
-    if last:
-        print(f"  Last brew:  {last.get('recipe', '?')} at {last.get('time', '?')}")
-    recipes = data.get("recipes", [])
-    if recipes:
-        print(f"  Recipes:    {', '.join(recipes[:6])}")
-    print()
-
-
-def _slash_picar():
-    """Quick PiCar-X robot status."""
-    print(f"\n  {C_BOLD}🤖 PiCar-X Robot{C_RESET}\n")
-    data = _quick_curl("http://192.168.8.107:5002/status")
-    if not data:
-        print(f"  {C_DIM}PiCar-X proxy not available (Raspi off?){C_RESET}\n")
-        return
-    hw = data.get("initialized", False)
-    moving = data.get("moving", False)
-    direction = data.get("direction", "stopped")
-    speed = data.get("speed", 0)
-    mode = data.get("autonomous_mode")
-    ultra = data.get("ultrasonic_cm", -1)
-    gs = data.get("grayscale", [])
-    batt = data.get("battery_v", -1)
-    pan = data.get("cam_pan", 0)
-    tilt = data.get("cam_tilt", 0)
-    cmds = data.get("commands", 0)
-    print(f"  Hardware:   {'✅ online' if hw else '❌ not initialized'}")
-    if moving:
-        print(f"  Moving:     {C_BRIGHT_GREEN}🟢 {direction} @ {speed}%{C_RESET}")
-    else:
-        print(f"  Moving:     ⚪ stopped")
-    if mode:
-        print(f"  Auto mode:  {C_BRIGHT_YELLOW}{mode}{C_RESET}")
-    print(f"  Camera:     pan={pan}° tilt={tilt}°")
-    print(f"  Ultrasonic: {ultra} cm")
-    print(f"  Grayscale:  {gs}")
-    print(f"  Battery:    {batt}V")
-    print(f"  Commands:   {cmds}")
-    print()
-
-
-def _slash_ha():
-    """Quick Home Assistant status."""
-    print(f"\n  {C_BOLD}🏠 Home Assistant{C_RESET}\n")
-    # Try via Entity API
-    data = _quick_curl(f"http://{_RASPI_TS}:5000/status")
-    if data:
-        ha = data.get("ha_connected", False)
-        print(f"  Connected:  {'✅' if ha else '❌'}")
-    
-    # Try direct HA API
-    ha_data = _quick_curl(f"http://{_RASPI_TS}:8123/api/", timeout=3)
-    if ha_data:
-        print(f"  HA API:     {C_BRIGHT_GREEN}✅ responding{C_RESET}")
-    else:
-        # Check if Docker container is running
-        out = _quick_ssh(_RASPI_TS, _SSH_RASPI, "mrmoz", "docker ps --filter name=homeassistant --format '{{.Status}}' 2>/dev/null", timeout=5)
-        if out:
-            print(f"  Container:  {out}")
-        else:
-            print(f"  HA API:     {C_BRIGHT_RED}❌ not responding{C_RESET}")
-    print()
-
-
-def _slash_logs():
-    """Quick logs from Entity."""
-    print(f"\n  {C_BOLD}📋 Recent Entity Logs{C_RESET}\n")
-    out = _quick_ssh(_RASPI_TS, _SSH_RASPI, "mrmoz",
-        "journalctl -u tokio-entity --no-pager -n 15 --output=short 2>/dev/null || tail -15 /tmp/tokio_entity.log 2>/dev/null",
-        timeout=8)
-    if not out:
-        print(f"  {C_DIM}No logs available{C_RESET}\n")
-        return
-    for line in out.strip().split('\n')[-15:]:
-        # Color errors/warnings
-        if 'error' in line.lower() or 'exception' in line.lower():
-            print(f"  {C_BRIGHT_RED}{line[:120]}{C_RESET}")
-        elif 'warning' in line.lower():
-            print(f"  {C_BRIGHT_YELLOW}{line[:120]}{C_RESET}")
-        else:
-            print(f"  {C_DIM}{line[:120]}{C_RESET}")
-    print()
-
-
-def _slash_see():
-    """Quick snapshot from Entity camera."""
-    print(f"\n  {C_BOLD}📸 Camera Snapshot{C_RESET}\n")
-    data = _quick_curl(f"http://{_RASPI_TS}:5000/status")
-    if not data:
-        print(f"  {C_BRIGHT_RED}❌ Entity offline{C_RESET}\n")
-        return
-    persons = data.get('persons_detected', 0)
-    emotion = data.get('emotion', '?')
-    ai = data.get("ai_brain", {})
-    last_analysis = ai.get("last_analysis", "")
-    
-    print(f"  Persons:   {persons}")
-    print(f"  Emotion:   {emotion}")
-    if last_analysis:
-        # Truncate long analysis
-        if len(last_analysis) > 200:
-            last_analysis = last_analysis[:200] + "..."
-        print(f"  AI sees:   {C_ITALIC}{last_analysis}{C_RESET}")
-    print(f"\n  {C_DIM}Use 'que ves?' for full AI analysis{C_RESET}")
+    print(f"  Hailo:     {'✅' if v.get('hailo_available', v.get('hailo_active')) else '❌'}")
+    print(f"  FPS:       {C_BOLD}{v.get('fps','?')}{C_RESET}")
+    print(f"  Persons:   {data.get('persons_detected','?')}")
+    print(f"  Emotion:   {data.get('emotion','?')}")
+    print(f"  Security:  {'✅ connected' if data.get('security_connected') else '❌'}")
+    print(f"  HA:        {'✅' if data.get('ha_connected') else '❌'}")
     print()
 
 
 def _slash_sitrep():
     """Full SITREP — calls all slash commands."""
-    print(f"\n  {C_BOLD}{C_BRIGHT_WHITE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{C_RESET}")
-    print(f"  {C_BOLD}{C_BRIGHT_WHITE}  SITREP — Full Situation Report{C_RESET}")
-    print(f"  {C_BOLD}{C_BRIGHT_WHITE}  {time.strftime('%Y-%m-%d %H:%M:%S')}{C_RESET}")
-    print(f"  {C_BOLD}{C_BRIGHT_WHITE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{C_RESET}")
     _slash_status()
     _slash_threats()
     _slash_waf()
     _slash_health()
-    _slash_wifi()
 
 
 _SLASH_COMMANDS = {
@@ -952,12 +731,6 @@ _SLASH_COMMANDS = {
     "/containers": _slash_containers,
     "/entity": _slash_entity,
     "/sitrep": _slash_sitrep,
-    "/wifi": _slash_wifi,
-    "/coffee": _slash_coffee,
-    "/ha": _slash_ha,
-    "/logs": _slash_logs,
-    "/see": _slash_see,
-    "/picar": _slash_picar,
 }
 
 
@@ -973,33 +746,6 @@ def create_agent():
     llm = create_llm()
     agent = TokioAgent(llm=llm, workspace=workspace)
     return agent
-
-
-# ─── Token Cost Estimation ───────────────────────────
-
-# Approximate costs per 1M tokens (USD)
-_MODEL_COSTS = {
-    "claude-sonnet-4": {"input": 3.0, "output": 15.0},
-    "claude-sonnet-4-6": {"input": 3.0, "output": 15.0},
-    "claude-3-5-sonnet": {"input": 3.0, "output": 15.0},
-    "claude-3-opus": {"input": 15.0, "output": 75.0},
-    "claude-3-haiku": {"input": 0.25, "output": 1.25},
-}
-
-def _estimate_cost(model: str, input_tokens: int, output_tokens: int) -> str:
-    """Estimate cost based on model and tokens."""
-    costs = None
-    for key, val in _MODEL_COSTS.items():
-        if key in model.lower():
-            costs = val
-            break
-    if not costs:
-        costs = _MODEL_COSTS["claude-sonnet-4"]
-    
-    cost = (input_tokens * costs["input"] + output_tokens * costs["output"]) / 1_000_000
-    if cost < 0.01:
-        return f"${cost:.4f}"
-    return f"${cost:.2f}"
 
 
 # ─── Status Bar ──────────────────────────────────────
@@ -1019,8 +765,6 @@ def format_status(agent, elapsed: float, tool_count: int = 0) -> str:
 
     # Tokens
     total_tokens = stats.get("total_tokens", 0)
-    input_tokens = stats.get("input_tokens", 0)
-    output_tokens = stats.get("output_tokens", 0)
     if total_tokens > 1_000_000:
         parts.append(f"📊 {total_tokens/1_000_000:.1f}M tokens")
     elif total_tokens > 1000:
@@ -1041,12 +785,6 @@ def format_status(agent, elapsed: float, tool_count: int = 0) -> str:
     if mem.get("total_memories_saved", 0) > 0:
         parts.append(f"🧠 {mem['total_memories_saved']} memories")
 
-    # Cost estimation
-    model = stats.get("llm", "")
-    if input_tokens > 0 or output_tokens > 0:
-        cost = _estimate_cost(model, input_tokens, output_tokens)
-        parts.append(f"💰 ~{cost}")
-
     return " │ ".join(parts)
 
 
@@ -1056,7 +794,7 @@ def show_help(agent):
     w = min(_term_width() - 4, 60)
     print(f"""
 {C_BOLD}{C_BRIGHT_CYAN}{'─' * w}{C_RESET}
-{C_BOLD} TokioAI CLI v3.3 — Help{C_RESET}
+{C_BOLD} TokioAI CLI — Help{C_RESET}
 {C_BOLD}{C_BRIGHT_CYAN}{'─' * w}{C_RESET}
 
 {C_BOLD}Commands:{C_RESET}
@@ -1068,7 +806,6 @@ def show_help(agent):
   {C_BRIGHT_CYAN}clear{C_RESET}             Clear screen
   {C_BRIGHT_CYAN}unlimited{C_RESET}         Toggle unlimited mode
   {C_BRIGHT_CYAN}persistent{C_RESET}        Toggle persistent mode
-  {C_BRIGHT_CYAN}config{C_RESET}            Show configuration
 
 {C_BOLD}Quick Commands (instant, no LLM):{C_RESET}
   {C_BRIGHT_GREEN}/status{C_RESET}           System overview
@@ -1079,18 +816,12 @@ def show_help(agent):
   {C_BRIGHT_GREEN}/drone{C_RESET}            Drone status
   {C_BRIGHT_GREEN}/entity{C_RESET}           Entity vision status
   {C_BRIGHT_GREEN}/containers{C_RESET}       GCP Docker containers
-  {C_BRIGHT_GREEN}/see{C_RESET}              Camera snapshot + AI analysis
-  {C_BRIGHT_GREEN}/wifi{C_RESET}             WiFi defense status
-  {C_BRIGHT_GREEN}/coffee{C_RESET}           Coffee machine status
-  {C_BRIGHT_GREEN}/ha{C_RESET}               Home Assistant status
-  {C_BRIGHT_GREEN}/picar{C_RESET}            PiCar-X robot status
-  {C_BRIGHT_GREEN}/logs{C_RESET}             Recent Entity logs
+  {C_BRIGHT_GREEN}/see{C_RESET}              Camera snapshot info
 
 {C_BOLD}Shortcuts:{C_RESET}
   {C_BRIGHT_YELLOW}Tab{C_RESET}               Autocomplete commands
   {C_BRIGHT_YELLOW}Escape{C_RESET}            Cancel current request
   {C_BRIGHT_YELLOW}Ctrl+C{C_RESET}            Cancel / Exit
-  {C_BRIGHT_YELLOW}\\\\{C_RESET} (at end)        Multi-line input
 
 {C_BOLD}Skills:{C_RESET}
 {agent.skill_registry.format_help()}
@@ -1099,8 +830,7 @@ def show_help(agent):
   {C_GRAY}scan the network for open ports{C_RESET}
   {C_GRAY}check all docker containers on GCP{C_RESET}
   {C_GRAY}create a PDF report of WAF logs{C_RESET}
-  {C_GRAY}conectate al drone y despegalo{C_RESET}
-  {C_GRAY}/sitrep{C_RESET}
+  {C_GRAY}/status{C_RESET}
 {C_BOLD}{C_BRIGHT_CYAN}{'─' * w}{C_RESET}
 """)
 
@@ -1110,6 +840,7 @@ def show_help(agent):
 def show_banner(mode_parts: list, agent=None):
     """Show the startup banner with gradient colors."""
 
+    # Gradient colors for TOKIO letters
     g = [196, 202, 208, 214, 220, 226]  # Red to yellow gradient
 
     banner_lines = [
@@ -1128,19 +859,24 @@ def show_banner(mode_parts: list, agent=None):
 
     # Version & model info
     model_name = "Claude Sonnet 4"
-    tools_count = 0
     if agent:
         try:
             stats = agent.get_stats()
             model_name = stats.get("llm", model_name)
+        except Exception:
+            pass
+
+    tools_count = 0
+    if agent:
+        try:
             tools_count = stats.get("tools_count", 0)
         except Exception:
             pass
 
-    print(f"    {C_BOLD}{C_BRIGHT_WHITE}  Autonomous AI Agent{C_RESET} {C_GRAY}v3.3{C_RESET}")
+    print(f"    {C_BOLD}{C_BRIGHT_WHITE}  Autonomous AI Agent{C_RESET} {C_GRAY}v3.1{C_RESET}")
     print(f"    {C_GRAY}  {model_name} • {tools_count} tools • {' • '.join(mode_parts)}{C_RESET}")
     print()
-    print(f"    {C_GRAY}  Type {C_BRIGHT_CYAN}help{C_GRAY} for commands • {C_BRIGHT_YELLOW}Esc{C_GRAY} to cancel • {C_BRIGHT_YELLOW}Tab{C_GRAY} to complete{C_RESET}")
+    print(f"    {C_GRAY}  Type {C_BRIGHT_CYAN}help{C_GRAY} for commands • {C_BRIGHT_YELLOW}Esc{C_GRAY} to cancel • {C_BRIGHT_YELLOW}Ctrl+C{C_GRAY} to exit{C_RESET}")
     print()
 
 
@@ -1153,52 +889,28 @@ async def process_streaming(agent, user_input: str, session_id: str):
     t0 = time.time()
 
     streaming_text = False
-    ever_streamed = False
-    collected_text = []
+    ever_streamed = False  # Track if we ever streamed tokens (to avoid double-print on "done")
     tool_count = 0
-    current_round = 1
+    current_round = 0
+    collected_text = []
+
     old_settings = None
-    _cbreak_active = False
-
-    def _enter_cbreak():
-        nonlocal old_settings, _cbreak_active
-        if _cbreak_active or _IS_WINDOWS:
-            return
-        try:
-            if sys.stdin.isatty():
-                old_settings = termios.tcgetattr(sys.stdin)
-                tty.setcbreak(sys.stdin.fileno())
-                _cbreak_active = True
-        except Exception:
-            pass
-
-    def _exit_cbreak():
-        nonlocal _cbreak_active
-        if not _cbreak_active or _IS_WINDOWS:
-            return
-        _cbreak_active = False  # mark first to prevent re-entry
-        try:
-            if old_settings and sys.stdin.isatty():
-                termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
-        except Exception:
-            pass
-        try:
-            if sys.stdin.isatty():
-                os.system("stty sane 2>/dev/null")
-        except Exception:
-            pass
-
-    _enter_cbreak()
+    try:
+        if sys.stdin.isatty() and not _IS_WINDOWS:
+            old_settings = termios.tcgetattr(sys.stdin)
+            tty.setcbreak(sys.stdin.fileno())
+    except Exception:
+        pass
 
     async def _check_cancel():
         while not cancel_event.is_set():
-            if _cbreak_active and _check_escape():
+            if _check_escape():
                 cancel_event.set()
                 spinner.stop()
                 sys.stdout.write(f"\n  {C_BRIGHT_YELLOW}⛔ Cancelling...{C_RESET}\n")
                 sys.stdout.flush()
                 break
-            await asyncio.sleep(0.1)  # reduced polling frequency
+            await asyncio.sleep(0.05)
 
     cancel_task = asyncio.create_task(_check_cancel())
 
@@ -1231,6 +943,7 @@ async def process_streaming(agent, user_input: str, session_id: str):
                 collected_text.append(data)
 
             elif event_type == "preparing":
+                # Text finished, tools coming — show spinner immediately
                 if streaming_text:
                     sys.stdout.write("\n")
                     streaming_text = False
@@ -1241,6 +954,7 @@ async def process_streaming(agent, user_input: str, session_id: str):
                 name, args = data
                 spinner.stop()
                 if streaming_text:
+                    # Render collected markdown before tool
                     sys.stdout.write("\n")
                     streaming_text = False
                     collected_text = []
@@ -1267,9 +981,11 @@ async def process_streaming(agent, user_input: str, session_id: str):
             elif event_type == "done":
                 spinner.stop()
                 if not streaming_text and not ever_streamed and data:
+                    # Only render if we never streamed any tokens (non-streaming response)
                     rendered = MarkdownRenderer.render(data)
                     print(f"\n{rendered}")
                 elif streaming_text:
+                    # End streaming cleanly
                     sys.stdout.write("\n")
 
             elif event_type == "error":
@@ -1290,10 +1006,7 @@ async def process_streaming(agent, user_input: str, session_id: str):
         print(f"\n  {C_BRIGHT_RED}✗ Unexpected error: {e}{C_RESET}")
 
     finally:
-        # CRITICAL: restore terminal FIRST, before anything else
         cancel_event.set()
-        _exit_cbreak()
-
         spinner.stop()
 
         if stream_gen is not None:
@@ -1308,81 +1021,12 @@ async def process_streaming(agent, user_input: str, session_id: str):
         except asyncio.CancelledError:
             pass
 
-        # Triple-check: flush + stty sane
-        _flush_stdin()
-        if not _IS_WINDOWS and sys.stdin.isatty():
+        if old_settings:
             try:
-                os.system("stty sane 2>/dev/null")
+                termios.tcsetattr(sys.stdin, termios.TCSANOW, old_settings)
             except Exception:
                 pass
-
-
-# ─── Config Command ─────────────────────────────────
-
-def _show_config():
-    """Show current CLI configuration."""
-    w = min(_term_width() - 4, 55)
-    print(f"\n  {C_BOLD}{C_BRIGHT_CYAN}{'─' * w}{C_RESET}")
-    print(f"  {C_BOLD}⚙️  Configuration{C_RESET}")
-    print(f"  {C_BOLD}{C_BRIGHT_CYAN}{'─' * w}{C_RESET}")
-    
-    # Hosts
-    print(f"\n  {C_BOLD}Hosts:{C_RESET}")
-    print(f"  {C_GRAY}Raspi LAN:{C_RESET}      {_RASPI_IP or C_DIM + 'not set' + C_RESET}")
-    print(f"  {C_GRAY}Raspi TS:{C_RESET}       {_RASPI_TS or C_DIM + 'not set' + C_RESET}")
-    print(f"  {C_GRAY}GCP:{C_RESET}            {_GCP_IP or C_DIM + 'not set' + C_RESET}")
-    
-    # SSH Keys
-    print(f"\n  {C_BOLD}SSH Keys:{C_RESET}")
-    raspi_key = '✅' if os.path.exists(_SSH_RASPI) else '❌'
-    gcp_key = '✅' if os.path.exists(_SSH_GCP) else '❌'
-    print(f"  {C_GRAY}Raspi:{C_RESET}          {raspi_key} {_SSH_RASPI}")
-    print(f"  {C_GRAY}GCP:{C_RESET}            {gcp_key} {_SSH_GCP}")
-    
-    # Env file
-    env_file = os.path.expanduser("~/.tokioai/.env")
-    env_exists = os.path.exists(env_file)
-    print(f"\n  {C_BOLD}Environment:{C_RESET}")
-    print(f"  {C_GRAY}.env file:{C_RESET}      {'✅' if env_exists else '❌'} {env_file}")
-    
-    # Model
-    model = os.getenv("TOKIOAI_MODEL", "sonnet")
-    print(f"  {C_GRAY}Model:{C_RESET}          {model}")
-    
-    # Session
-    print(f"\n  {C_BOLD}Session:{C_RESET}")
-    print(f"  {C_GRAY}History:{C_RESET}        {HISTORY_FILE}")
-    if os.path.exists(HISTORY_FILE):
-        try:
-            with open(HISTORY_FILE) as f:
-                count = sum(1 for _ in f)
-            print(f"  {C_GRAY}History size:{C_RESET}   {count} entries")
-        except Exception:
-            pass
-    
-    print(f"  {C_BOLD}{C_BRIGHT_CYAN}{'─' * w}{C_RESET}\n")
-
-
-# ─── Multi-line Input ────────────────────────────────
-
-def _read_multiline(first_line: str) -> str:
-    """Handle multi-line input with \\ continuation."""
-    if not first_line.endswith('\\'):
-        return first_line
-    
-    lines = [first_line[:-1]]  # Remove trailing backslash
-    while True:
-        try:
-            continuation = input(f"  {C_DIM}...{C_RESET} ")
-            if continuation.endswith('\\'):
-                lines.append(continuation[:-1])
-            else:
-                lines.append(continuation)
-                break
-        except (EOFError, KeyboardInterrupt):
-            break
-    
-    return '\n'.join(lines)
+        _flush_stdin()
 
 
 # ─── Main Loop ───────────────────────────────────────
@@ -1457,24 +1101,17 @@ async def run_interactive(session_id: Optional[str] = None, max_rounds: int = 25
         pass
 
     while True:
-        # Restore terminal to clean state before every prompt
         if _clean_term:
             try:
-                termios.tcsetattr(sys.stdin, termios.TCSADRAIN, _clean_term)
-            except Exception:
-                pass
-        if not _IS_WINDOWS and sys.stdin.isatty():
-            try:
-                os.system("stty sane 2>/dev/null")
+                termios.tcsetattr(sys.stdin, termios.TCSANOW, _clean_term)
             except Exception:
                 pass
         _flush_stdin()
 
         try:
-            if _IS_WINDOWS:
-                prompt = f"\n{C_BOLD}{C_BRIGHT_CYAN}❯{C_RESET} "
-            else:
-                prompt = f"\n\001{C_BOLD}{C_BRIGHT_CYAN}\002❯\001{C_RESET}\002 "
+            # \001 and \002 tell readline to ignore ANSI codes for width calc
+            # This fixes the bug where long text or pasted text wraps incorrectly
+            prompt = f"\n\001{C_BOLD}{C_BRIGHT_CYAN}\002❯\001{C_RESET}\002 "
             user_input = input(prompt).strip()
         except (EOFError, KeyboardInterrupt):
             print(f"\n{C_GRAY}Bye! 👋{C_RESET}")
@@ -1482,9 +1119,6 @@ async def run_interactive(session_id: Optional[str] = None, max_rounds: int = 25
 
         if not user_input:
             continue
-
-        # Handle multi-line input
-        user_input = _read_multiline(user_input)
 
         _save_history()
 
@@ -1527,9 +1161,6 @@ async def run_interactive(session_id: Optional[str] = None, max_rounds: int = 25
             agent.MAX_TOTAL_TIME = 600
             print(f"  {C_BRIGHT_GREEN}✓ Stopped. Normal mode: 25 rounds{C_RESET}")
             continue
-        if lower == "config":
-            _show_config()
-            continue
         if lower == "stats":
             stats = agent.get_stats()
             mode = "UNLIMITED" if agent.MAX_TOOL_ROUNDS == 0 else f"{agent.MAX_TOOL_ROUNDS} rounds"
@@ -1542,16 +1173,9 @@ async def run_interactive(session_id: Optional[str] = None, max_rounds: int = 25
             print(f"  {C_BRIGHT_CYAN}🔧{C_RESET} Tools:         {stats.get('tools_count', 0)} available")
             print(f"  {C_BRIGHT_CYAN}💬{C_RESET} Messages:      {stats.get('messages_processed', 0)}")
             print(f"  {C_BRIGHT_CYAN}⚡{C_RESET} Tools used:    {stats.get('tools_executed', 0)}")
-            total_tokens = stats.get('total_tokens', 0)
-            input_tokens = stats.get('input_tokens', 0)
-            output_tokens = stats.get('output_tokens', 0)
-            print(f"  {C_BRIGHT_CYAN}📊{C_RESET} Tokens:        {total_tokens:,} (in:{input_tokens:,} out:{output_tokens:,})")
+            print(f"  {C_BRIGHT_CYAN}📊{C_RESET} Tokens:        {stats.get('total_tokens', 0):,}")
             print(f"  {C_BRIGHT_CYAN}📦{C_RESET} Compactions:   {stats.get('compactions', 0)}")
             print(f"  {C_BRIGHT_CYAN}🧠{C_RESET} Memories:      {stats.get('memories_extracted', 0)}")
-            # Cost estimate
-            model = stats.get('llm', '')
-            cost = _estimate_cost(model, input_tokens, output_tokens)
-            print(f"  {C_BRIGHT_CYAN}💰{C_RESET} Est. cost:     ~{cost}")
             print(f"  {C_BOLD}{C_BRIGHT_CYAN}{'─' * w}{C_RESET}")
             continue
         if lower == "tools":
@@ -1583,6 +1207,18 @@ async def run_interactive(session_id: Optional[str] = None, max_rounds: int = 25
                 print(f"  {C_BRIGHT_RED}✗ {e}{C_RESET}")
             continue
 
+        # /see → take a snapshot (special — needs async)
+        if lower == "/see":
+            print(f"\n  {C_BOLD}📸 Taking snapshot...{C_RESET}")
+            data = _quick_curl(f"http://{_RASPI_TS}:5000/status")
+            if data:
+                print(f"  👁️  {data.get('persons_detected',0)} persons | {data.get('emotion','?')}")
+                print(f"  {C_DIM}Use 'que ves?' to get AI analysis{C_RESET}")
+            else:
+                print(f"  {C_BRIGHT_RED}❌ Entity offline{C_RESET}")
+            print()
+            continue
+
         # Process with streaming
         await process_streaming(agent, user_input, sid)
 
@@ -1595,11 +1231,7 @@ async def run_interactive(session_id: Optional[str] = None, max_rounds: int = 25
         if _persistent_mode:
             while _persistent_mode:
                 try:
-                    if _IS_WINDOWS:
-                        follow_prompt = f"\n  {C_GRAY}[persistent]{C_RESET} {C_BOLD}{C_BRIGHT_CYAN}❯{C_RESET} "
-                    else:
-                        follow_prompt = f"\n  \001{C_GRAY}\002[persistent]\001{C_RESET}\002 \001{C_BOLD}{C_BRIGHT_CYAN}\002❯\001{C_RESET}\002 "
-                    follow_up = input(follow_prompt).strip()
+                    follow_up = input(f"\n  \001{C_GRAY}\002[persistent]\001{C_RESET}\002 \001{C_BOLD}{C_BRIGHT_CYAN}\002❯\001{C_RESET}\002 ").strip()
                 except (EOFError, KeyboardInterrupt):
                     _persistent_mode = False
                     print(f"\n  {C_BRIGHT_GREEN}✓ Persistent mode stopped.{C_RESET}")
@@ -1635,7 +1267,7 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="TokioAI CLI v3.3 — Autonomous AI Agent",
+        description="TokioAI CLI — Autonomous AI Agent",
     )
     parser.add_argument("query", nargs="*", help="Query to run (omit for interactive mode)")
     parser.add_argument("--session", "-s", default=None, help="Session ID")

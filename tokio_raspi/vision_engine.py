@@ -438,11 +438,23 @@ class VisionEngine:
         return buf.tobytes()
 
     def release(self):
-        """Release all resources."""
+        """Release all resources — camera + Hailo."""
         self.stop()
         if self._cap:
-            self._cap.release()
+            try:
+                self._cap.release()
+            except Exception:
+                pass
+            self._cap = None
         self._cleanup_hailo()
+        print("[VisionEngine] All resources released")
+
+    def __del__(self):
+        """Safety net — release resources if not properly stopped."""
+        try:
+            self.release()
+        except Exception:
+            pass
 
 
 # ---------------------------------------------------------------------------

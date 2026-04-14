@@ -237,9 +237,14 @@ SAFETY_PRESETS = {
 AUTHORIZED_IPS = {
     "127.0.0.1",            # localhost
     "::1",                  # localhost ipv6
+    "100.100.80.12",        # this Raspi (Tailscale)
+    "100.125.151.118",      # GCP TokioAI (Tailscale)
+    "100.79.121.13",        # Dev machine (Tailscale)
+    "100.64.237.35",        # Subnet router (Tailscale)
+    "192.168.8.161",        # Raspi LAN
+    "192.168.8.235",        # Dev machine LAN
 }
-# Add your Tailscale/LAN IPs via env var (comma-separated)
-# Example: DRONE_AUTHORIZED_IPS=10.0.0.1,10.0.0.2,192.168.1.100
+# Additional IPs from env
 _extra = os.getenv("DRONE_AUTHORIZED_IPS", "")
 AUTHORIZED_IPS |= {ip.strip() for ip in _extra.split(",") if ip.strip()}
 
@@ -1101,67 +1106,172 @@ def create_drone_api(proxy: DroneSafetyProxy):
 
     @api.route("/drone/wifi/connect", methods=["POST"])
     def wifi_connect():
-        """Connect wlan0 (internal WiFi) to Tello drone WiFi (T0K10-NET).
+        """Connect wlan0 to Tello drone WiFi with real scanning + retry.
 
-        wlan0 = internal WiFi, switches from home network to drone network.
-        wlan1 = external USB adapter, stays in monitor mode for WiFi defense.
-        Tailscale runs over eth0 (cable), so connectivity is never lost.
+        Flow:
+        1. Scan for TELLO-* SSIDs on wlan0
+        2. If found, update nmcli profile with exact SSID
+        3. Connect with retry (up to 3 attempts)
+        4. Verify connection by pinging 192.168.10.1
+        5. If scan fails, try known SSIDs from config
+
+        wlan0 = switches to drone network
+        wlan1 = stays in monitor mode for WiFi defense
+        Tailscale runs over eth0 (cable), connectivity never lost.
         """
         import subprocess
+        import time
 
         iface = "wlan0"
         profile = "tello-drone"
         steps = []
+        # Known Tello SSID patterns — add yours here
+        TELLO_PATTERNS = ["TELLO-", "T0K10", "tello", "DJI_TELLO"]
+        KNOWN_SSIDS = ["TELLO-6C0D08", "T0K10-NET"]  # exact known SSIDs
 
-        try:
-            # Update profile to use wlan0
-            subprocess.run(
-                ["sudo", "nmcli", "connection", "modify", profile,
-                 "802-11-wireless.band", "bg",
-                 "connection.interface-name", iface],
-                capture_output=True, timeout=5
-            )
-            steps.append(f"profile configured for {iface}")
+        def _scan_tello():
+            """Scan for Tello WiFi networks, return list of matching SSIDs."""
+            try:
+                # Force a fresh scan
+                subprocess.run(
+                    ["sudo", "nmcli", "dev", "wifi", "rescan", "ifname", iface],
+                    capture_output=True, timeout=10
+                )
+                time.sleep(2)  # Wait for scan results
 
-            tello_ssid = ""
+                r = subprocess.run(
+                    ["nmcli", "-t", "-f", "SSID,SIGNAL", "dev", "wifi", "list",
+                     "ifname", iface],
+                    capture_output=True, text=True, timeout=10
+                )
+                if r.returncode != 0:
+                    return []
 
-            # If we found a specific TELLO SSID, update the profile
-            if tello_ssid:
+                found = []
+                for line in r.stdout.strip().split("\n"):
+                    if ":" not in line:
+                        continue
+                    ssid, signal = line.rsplit(":", 1)
+                    ssid = ssid.strip()
+                    for pattern in TELLO_PATTERNS:
+                        if pattern.lower() in ssid.lower():
+                            found.append((ssid, int(signal) if signal.isdigit() else 0))
+                            break
+                # Sort by signal strength
+                found.sort(key=lambda x: x[1], reverse=True)
+                return found
+            except Exception as e:
+                steps.append(f"scan error: {e}")
+                return []
+
+        def _try_connect(ssid: str) -> bool:
+            """Try to connect to a specific SSID, return True on success."""
+            try:
+                # Update profile with this SSID
                 subprocess.run(
                     ["sudo", "nmcli", "connection", "modify", profile,
-                     "802-11-wireless.ssid", tello_ssid],
+                     "802-11-wireless.ssid", ssid,
+                     "802-11-wireless.band", "bg",
+                     "connection.interface-name", iface,
+                     "connection.autoconnect", "no"],
                     capture_output=True, timeout=5
                 )
-                steps.append(f"profile ssid set to {tello_ssid}")
+                steps.append(f"profile set to '{ssid}'")
 
-            # Step 4: Connect
-            r = subprocess.run(
-                ["sudo", "nmcli", "connection", "up", profile, "ifname", iface],
-                capture_output=True, text=True, timeout=20
-            )
-            if r.returncode == 0:
-                steps.append("connected!")
-                logger.info(f"Drone WiFi connected via {iface}: {tello_ssid}")
-                return jsonify({"ok": True, "steps": steps,
-                                "result": f"Connected to {tello_ssid or profile} on {iface}"})
+                r = subprocess.run(
+                    ["sudo", "nmcli", "connection", "up", profile, "ifname", iface],
+                    capture_output=True, text=True, timeout=20
+                )
+                if r.returncode == 0:
+                    return True
+
+                # Fallback: direct connect (creates new profile if needed)
+                r2 = subprocess.run(
+                    ["sudo", "nmcli", "dev", "wifi", "connect", ssid,
+                     "ifname", iface],
+                    capture_output=True, text=True, timeout=20
+                )
+                return r2.returncode == 0
+            except Exception as e:
+                steps.append(f"connect error: {e}")
+                return False
+
+        def _verify_connection() -> bool:
+            """Verify drone is reachable after WiFi connect."""
+            try:
+                r = subprocess.run(
+                    ["ping", "-c", "1", "-W", "2", "192.168.10.1"],
+                    capture_output=True, timeout=5
+                )
+                return r.returncode == 0
+            except Exception:
+                return False
+
+        try:
+            # Step 1: Scan for Tello WiFi
+            steps.append("scanning for Tello WiFi...")
+            found_ssids = _scan_tello()
+
+            if found_ssids:
+                steps.append(f"found {len(found_ssids)} Tello network(s): {[s[0] for s in found_ssids]}")
+                ssids_to_try = [s[0] for s in found_ssids]
             else:
-                steps.append(f"connect failed: {r.stderr.strip()}")
+                steps.append("no Tello SSID found in scan, trying known SSIDs")
+                ssids_to_try = KNOWN_SSIDS
 
-                # Fallback: try direct connect if profile doesn't work
-                if tello_ssid:
-                    r2 = subprocess.run(
-                        ["sudo", "nmcli", "dev", "wifi", "connect", tello_ssid,
-                         "ifname", iface],
-                        capture_output=True, text=True, timeout=20
-                    )
-                    if r2.returncode == 0:
-                        steps.append("fallback connect OK!")
-                        return jsonify({"ok": True, "steps": steps,
-                                        "result": f"Connected to {tello_ssid} on {iface}"})
-                    steps.append(f"fallback failed: {r2.stderr.strip()}")
+            # Step 2: Try connecting with retry
+            MAX_RETRIES = 3
+            connected = False
 
-                return jsonify({"ok": False, "steps": steps,
-                                "error": "Could not connect to Tello WiFi"}), 500
+            for ssid in ssids_to_try:
+                for attempt in range(1, MAX_RETRIES + 1):
+                    steps.append(f"attempt {attempt}/{MAX_RETRIES}: connecting to '{ssid}'")
+                    if _try_connect(ssid):
+                        steps.append(f"WiFi connected to '{ssid}'!")
+                        time.sleep(1)
+
+                        # Step 3: Verify drone is reachable
+                        if _verify_connection():
+                            steps.append("drone reachable at 192.168.10.1 ✓")
+                            connected = True
+                            logger.info(f"Drone WiFi connected: {ssid} on {iface}")
+                            return jsonify({
+                                "ok": True,
+                                "steps": steps,
+                                "ssid": ssid,
+                                "result": f"Connected to {ssid} on {iface}, drone reachable"
+                            })
+                        else:
+                            steps.append("WiFi up but drone not reachable, retrying...")
+                            time.sleep(2)
+                    else:
+                        steps.append(f"connect failed, waiting before retry...")
+                        time.sleep(2)
+
+            # All attempts failed
+            if not connected:
+                steps.append("all connection attempts failed")
+                # Try to restore home network
+                subprocess.run(
+                    ["sudo", "nmcli", "connection", "up", "MrM35G", "ifname", "wlan0"],
+                    capture_output=True, timeout=15
+                )
+                steps.append("home network restored")
+
+                # Give actionable error
+                if not found_ssids:
+                    error_msg = ("Tello WiFi not found. Check: "
+                                 "1) Drone is ON (solid green LED) "
+                                 "2) Drone is within 10m "
+                                 "3) Wait 30s after powering on")
+                else:
+                    error_msg = f"Found Tello WiFi ({found_ssids[0][0]}) but could not connect after {MAX_RETRIES} attempts"
+
+                return jsonify({
+                    "ok": False,
+                    "steps": steps,
+                    "error": error_msg
+                }), 500
 
         except Exception as e:
             steps.append(f"exception: {str(e)}")

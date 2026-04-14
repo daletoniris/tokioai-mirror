@@ -25,8 +25,38 @@ RASPI_API = os.getenv("RASPI_API_URL", "")
 TIMEOUT = 15.0
 
 
+def _enrich_drone_error(e: Exception, path: str) -> str:
+    """Provide actionable error messages for drone operations."""
+    err = str(e)
+    if "Connection refused" in err or "connect" in err.lower():
+        return (f"Drone proxy no responde ({path}). "
+                "Posibles causas: 1) Raspberry Pi apagada — requiere encendido físico. "
+                "2) Servicio tokio-drone-proxy caído — intentar self_heal(action='check'). "
+                "3) WiFi del drone no conectado — usar drone(action='wifi_connect').")
+    if "timeout" in err.lower():
+        return (f"Timeout en drone proxy ({path}). "
+                "El drone puede estar procesando un comando largo o desconectado.")
+    return f"Error drone: {err}"
+
+
+# Timeout map for different operations
+_TIMEOUT_MAP = {
+    "takeoff": 20.0,
+    "land": 15.0,
+    "patrol": 30.0,
+    "dance": 25.0,
+    "move": 15.0,
+    "rotate": 10.0,
+    "snapshot": 10.0,
+    "wifi_connect": 25.0,
+    "wifi_disconnect": 20.0,
+}
+
+
 async def _api(method: str, path: str, data: dict = None, timeout: float = None) -> dict:
     """Make request to drone safety proxy."""
+    if not DRONE_API:
+        return {"error": "DRONE_API_URL no configurada. Verificar variables de entorno del agente."}
     try:
         async with httpx.AsyncClient(timeout=timeout or TIMEOUT) as client:
             if method == "GET":
@@ -35,11 +65,13 @@ async def _api(method: str, path: str, data: dict = None, timeout: float = None)
                 r = await client.post(f"{DRONE_API}{path}", json=data or {})
             return r.json()
     except Exception as e:
-        return {"error": str(e)}
+        return {"error": _enrich_drone_error(e, path)}
 
 
 async def _entity_api(method: str, path: str, data: dict = None, timeout: float = None) -> dict:
     """Make request to entity API (for vision endpoints)."""
+    if not RASPI_API:
+        return {"error": "RASPI_API_URL no configurada. Verificar variables de entorno del agente."}
     try:
         async with httpx.AsyncClient(timeout=timeout or 5.0) as client:
             if method == "GET":
@@ -48,7 +80,7 @@ async def _entity_api(method: str, path: str, data: dict = None, timeout: float 
                 r = await client.post(f"{RASPI_API}{path}", json=data or {})
             return r.json()
     except Exception as e:
-        return {"error": str(e)}
+        return {"error": _enrich_drone_error(e, path)}
 
 
 async def _entity_api_raw(method: str, path: str, data: dict = None, timeout: float = None):
@@ -353,14 +385,29 @@ async def drone_secure(action: str = "status", params: dict = None, **kwargs) ->
         return " | ".join(parts)
 
     else:
-        # All other commands go through the proxy
+        # All other commands (connect, takeoff, land, move, rotate, patrol, etc.)
+        # go through the safety proxy — never bypass it
+        timeout = _TIMEOUT_MAP.get(action, TIMEOUT)
+
         r = await _api("POST", "/drone/command", {
             "command": action,
             "params": params,
-        })
+        }, timeout=timeout)
+
         if "error" in r:
             return f"Error: {r['error']}"
+
         result = r.get("result", "")
         if r.get("blocked"):
-            return f"BLOCKED by safety proxy: {result}"
-        return result
+            reason = r.get("reason", result)
+            return f"⚠️ BLOCKED by safety proxy: {reason}"
+
+        # Enrich response for key commands
+        if action in ("takeoff", "despegar") and "ok" in str(result).lower():
+            return f"✅ Drone despegó exitosamente. Altura: ~120cm. Battery: {r.get('battery', '?')}%"
+        elif action in ("land", "aterrizar") and "ok" in str(result).lower():
+            return f"✅ Drone aterrizó exitosamente."
+        elif action in ("connect", "conectar") and "ok" in str(result).lower():
+            return f"✅ Drone conectado y listo. Battery: {r.get('battery', '?')}%"
+
+        return result if result else str(r)

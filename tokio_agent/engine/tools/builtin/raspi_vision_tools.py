@@ -17,24 +17,40 @@ RASPI_API = os.getenv("RASPI_API_URL", "")
 TIMEOUT = 10.0
 
 
+def _enrich_error(e: Exception, path: str) -> str:
+    """Provide actionable error messages instead of raw exceptions."""
+    err = str(e)
+    if "Connection refused" in err or "connect" in err.lower():
+        return (f"Raspberry Pi Entity no responde en {path}. "
+                "La Raspi puede estar apagada o el servicio Entity caído. "
+                "Intentar: self_heal(action='check')")
+    if "timeout" in err.lower():
+        return f"Timeout conectando a Entity ({path}). Red puede estar lenta."
+    return err
+
+
 async def _get(path: str):
+    if not RASPI_API:
+        return {"error": "RASPI_API_URL no configurada. Verificar variables de entorno del agente."}
     try:
         async with httpx.AsyncClient(timeout=TIMEOUT) as c:
             r = await c.get(f"{RASPI_API}{path}")
             r.raise_for_status()
             return r.json()
     except Exception as e:
-        return {"error": str(e)}
+        return {"error": _enrich_error(e, path)}
 
 
 async def _post(path: str, data: dict = None):
+    if not RASPI_API:
+        return {"error": "RASPI_API_URL no configurada. Verificar variables de entorno del agente."}
     try:
         async with httpx.AsyncClient(timeout=TIMEOUT) as c:
             r = await c.post(f"{RASPI_API}{path}", json=data or {})
             r.raise_for_status()
             return r.json()
     except Exception as e:
-        return {"error": str(e)}
+        return {"error": _enrich_error(e, path)}
 
 
 async def raspi_vision(action: str = "status", params: dict = None, **kwargs) -> str:
@@ -310,6 +326,142 @@ async def raspi_vision(action: str = "status", params: dict = None, **kwargs) ->
             return f"Error: {r['error']}"
         return "\n".join(f"{k}: {v}" for k, v in r.items())
 
+    elif action == "health_store":
+        # Store a manual health reading (e.g., from Accu-Answer iSaw device)
+        # params: metric (glucose/cholesterol/hemoglobin/uric_acid), value, unit, notes
+        metric = params.get("metric", "")
+        value = params.get("value")
+        unit = params.get("unit", "")
+        notes = params.get("notes", "manual entry")
+
+        # Map common names to DB metric names
+        metric_map = {
+            "glucose": ("blood_sugar", "mg/dL"),
+            "blood_sugar": ("blood_sugar", "mg/dL"),
+            "glucosa": ("blood_sugar", "mg/dL"),
+            "cholesterol": ("cholesterol_total", "mg/dL"),
+            "colesterol": ("cholesterol_total", "mg/dL"),
+            "cholesterol_total": ("cholesterol_total", "mg/dL"),
+            "hemoglobin": ("hemoglobin", "g/dL"),
+            "hemoglobina": ("hemoglobin", "g/dL"),
+            "uric_acid": ("uric_acid", "mg/dL"),
+            "acido_urico": ("uric_acid", "mg/dL"),
+        }
+
+        if metric.lower() in metric_map:
+            db_metric, default_unit = metric_map[metric.lower()]
+        else:
+            db_metric = metric
+            default_unit = unit
+
+        if not db_metric or value is None:
+            return "Error: Se requieren 'metric' y 'value'. Métricas válidas: glucose, cholesterol, hemoglobin, uric_acid"
+
+        r = await _post("/health/db/store", {
+            "metric": db_metric,
+            "value": float(value),
+            "unit": unit or default_unit,
+            "source": "manual_isaw",
+            "notes": notes,
+        })
+        if isinstance(r, dict) and "error" in r:
+            return f"Error: {r['error']}"
+
+        # Normal ranges for assessment
+        ranges = {
+            "blood_sugar": (70, 100, "mg/dL", "Glucosa"),
+            "cholesterol_total": (0, 200, "mg/dL", "Colesterol"),
+            "hemoglobin": (13.5, 17.5, "g/dL", "Hemoglobina"),
+            "uric_acid": (3.4, 7.0, "mg/dL", "Ácido Úrico"),
+        }
+
+        if db_metric in ranges:
+            low, high, u, name = ranges[db_metric]
+            val = float(value)
+            if val < low:
+                status = f"⚠️ BAJO (normal: {low}-{high} {u})"
+            elif val > high:
+                status = f"🔴 ALTO (normal: {low}-{high} {u})"
+            else:
+                status = f"✅ Normal ({low}-{high} {u})"
+            return f"📋 {name}: {val} {unit or default_unit} — {status}\nRegistrado en historial de salud."
+        return f"📋 {db_metric}: {value} {unit or default_unit} registrado."
+
+    elif action == "health_full":
+        # Full health report combining BLE watch + iSaw manual readings
+        r = await _get("/health/db/report")
+        if isinstance(r, dict) and "error" in r:
+            # Fallback to basic report
+            return await raspi_vision(action="health", params=params)
+
+        lines = ["═══ INFORME COMPLETO DE SALUD ═══\n"]
+
+        # Current vitals from watch
+        watch = await _get("/health/report")
+        if isinstance(watch, dict) and "error" not in watch:
+            lines.append("── Signos Vitales (Smartwatch) ──")
+            cur = watch.get("current", {})
+            if cur.get("heart_rate"):
+                lines.append(f"  ❤️  HR: {cur['heart_rate']} bpm")
+            if cur.get("blood_pressure"):
+                lines.append(f"  🩸 Presión: {cur['blood_pressure']} mmHg")
+            if cur.get("spo2"):
+                lines.append(f"  🫁 SpO2: {cur['spo2']}%")
+            if cur.get("steps"):
+                lines.append(f"  🚶 Pasos: {cur['steps']}")
+            lines.append(f"  📊 Estado: {watch.get('assessment', '?')}")
+            lines.append("")
+
+        # Lab values from iSaw
+        isaw_metrics = ["blood_sugar", "cholesterol_total", "hemoglobin", "uric_acid"]
+        ranges = {
+            "blood_sugar": (70, 100, "mg/dL", "Glucosa"),
+            "cholesterol_total": (0, 200, "mg/dL", "Colesterol Total"),
+            "hemoglobin": (13.5, 17.5, "g/dL", "Hemoglobina"),
+            "uric_acid": (3.4, 7.0, "mg/dL", "Ácido Úrico"),
+        }
+
+        has_lab = False
+        for metric in isaw_metrics:
+            latest = await _get(f"/health/db/latest?metrics={metric}")
+            if isinstance(latest, dict) and metric in latest:
+                entry = latest[metric]
+                if entry:
+                    if not has_lab:
+                        lines.append("── Laboratorio (Accu-Answer iSaw) ──")
+                        has_lab = True
+                    low, high, unit, name = ranges[metric]
+                    val = entry.get("value", 0)
+                    dt = entry.get("datetime", "?")
+                    if val < low:
+                        indicator = "⚠️ BAJO"
+                    elif val > high:
+                        indicator = "🔴 ALTO"
+                    else:
+                        indicator = "✅"
+                    lines.append(f"  {indicator} {name}: {val} {unit} ({dt})")
+
+        if not has_lab:
+            lines.append("── Laboratorio (Accu-Answer iSaw) ──")
+            lines.append("  Sin datos. Usá health_store para registrar mediciones.")
+
+        # Daily stats from DB
+        daily = r.get("daily_7d", []) if isinstance(r, dict) else []
+        if daily:
+            lines.append("\n── Promedios 7 días ──")
+            for day in daily[-3:]:
+                date = day.get("date", "?")
+                metrics_str = []
+                for m in day.get("metrics", {}):
+                    val = day["metrics"][m]
+                    if isinstance(val, dict):
+                        metrics_str.append(f"{m}={val.get('avg', '?')}")
+                if metrics_str:
+                    lines.append(f"  {date}: {', '.join(metrics_str)}")
+
+        lines.append(f"\n── Total lecturas: {r.get('total_readings', '?')} ──")
+        return "\n".join(lines)
+
     # ── Home Assistant ────────────────────────────────────────
 
     elif action == "ha_status":
@@ -461,7 +613,9 @@ async def raspi_vision(action: str = "status", params: dict = None, **kwargs) ->
             "Unknown action. Available:\n"
             "  Vision: status, see, look, snapshot, emotion, say, teach, faces, model, look_at\n"
             "  Thoughts: thoughts (recientes), thought_search (buscar), thought_summary (resumen)\n"
-            "  Health: health (reporte completo), health_status (estado actual)\n"
+            "  Health: health (reporte completo), health_status (estado actual), "
+            "health_store (registrar glucosa/colesterol/hemoglobina/acido_urico), "
+            "health_full (informe completo combinando watch + iSaw)\n"
             "  Home: ha_status\n"
             "  WiFi: wifi (estado defensa WiFi)\n"
             "  AI: ai_status, ai_memory, ai_correct, ai_teach, ai_forget, ai_person, ai_environment\n"

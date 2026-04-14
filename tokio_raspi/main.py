@@ -16,10 +16,14 @@ Layout (768x1366 vertical):
 from __future__ import annotations
 
 import argparse
+import atexit
+import fcntl
 import math
 import os
 import random
+import signal
 import subprocess
+import sys
 import threading
 import time
 from typing import Optional
@@ -28,9 +32,74 @@ import pygame
 import cv2
 import numpy as np
 
+# ---------------------------------------------------------------------------
+# Singleton lock — prevents dual-instance camera conflicts
+# ---------------------------------------------------------------------------
+_LOCK_FILE = "/tmp/tokio-entity.lock"
+_lock_fd = None
+
+
+def _acquire_singleton():
+    """Ensure only ONE Entity instance runs. Refuse to start if another is alive."""
+    global _lock_fd
+    try:
+        _lock_fd = open(_LOCK_FILE, "w")
+        fcntl.flock(_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        _lock_fd.write(str(os.getpid()))
+        _lock_fd.flush()
+        atexit.register(_release_singleton)
+        return True
+    except (IOError, OSError):
+        # Lock is held — check if the holder is alive
+        try:
+            with open(_LOCK_FILE) as f:
+                old_pid = int(f.read().strip())
+            os.kill(old_pid, 0)  # signal 0 = check alive
+            print(f"[Entity] Another instance is running (PID {old_pid}). "
+                  f"This instance (PID {os.getpid()}) will NOT start.")
+            sys.exit(1)
+        except (ValueError, ProcessLookupError, FileNotFoundError):
+            # Stale lock file — previous process died without cleanup
+            print("[Entity] Stale lock file detected, reclaiming...")
+            try:
+                os.remove(_LOCK_FILE)
+            except OSError:
+                pass
+            time.sleep(0.5)
+            # Retry lock acquisition
+            try:
+                _lock_fd = open(_LOCK_FILE, "w")
+                fcntl.flock(_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                _lock_fd.write(str(os.getpid()))
+                _lock_fd.flush()
+                atexit.register(_release_singleton)
+                return True
+            except (IOError, OSError):
+                print("[Entity] FATAL: Cannot acquire lock after cleanup")
+                sys.exit(1)
+        except PermissionError:
+            # Process exists but we can't signal it — treat as alive
+            print(f"[Entity] Another instance running (permission denied to check). Exiting.")
+            sys.exit(1)
+
+
+def _release_singleton():
+    """Release the singleton lock."""
+    global _lock_fd
+    if _lock_fd:
+        try:
+            fcntl.flock(_lock_fd, fcntl.LOCK_UN)
+            _lock_fd.close()
+            os.remove(_LOCK_FILE)
+        except (IOError, OSError):
+            pass
+        _lock_fd = None
+
 from .tokio_face import TokioFace, Emotion
 from .coco_labels import THREAT_OBJECTS
 from .security_feed import SecurityFeed, JP_THREATS
+from .threat_correlation import ThreatCorrelationEngine
+from .adaptive_defense import AdaptiveDefense
 from .face_db import FaceDB
 from .face_identifier import FaceIdentifier
 from .gesture_detector import GestureDetector, Gesture, GESTURE_REACTIONS, GESTURE_ICONS
@@ -42,6 +111,20 @@ from .coffee_esphome import CoffeeMachine
 from .health_monitor import HealthMonitor
 from .vision_filter import VisionFilter
 from .thought_log import ThoughtLog
+
+# Persistence and alerts
+try:
+    from .event_store import EventStore
+except ImportError:
+    EventStore = None
+try:
+    from .health_alerts import HealthAlerts
+except ImportError:
+    HealthAlerts = None
+try:
+    from .stand_mode import StandMode
+except ImportError:
+    StandMode = None
 from .ble_security_monitor import BLESecurityMonitor
 from .wpa2_monitor import WPA2Monitor
 from .mavlink_drone import MAVLinkDrone
@@ -559,9 +642,19 @@ class TokioEntity:
         self.ai_brain.set_vision_filter(self.vision_filter)
 
         # Health Monitor — BLE smartwatch
+        self._health_alerts = None  # init before health block
         self.health = HealthMonitor()
         if self.health.available:
             self.health.start()
+
+            # Start health alerts monitoring
+            if HealthAlerts:
+                try:
+                    self._health_alerts = HealthAlerts(self)
+                    self._health_alerts.start()
+                    print("[Entity] Health alerts monitoring started")
+                except Exception as e:
+                    print(f"[Entity] Health alerts failed: {e}")
             self._say("Monitor de salud BLE activo.", C_TEXT_OK)
 
         # BLE Security Monitor — Bluetooth attack detection
@@ -569,6 +662,32 @@ class TokioEntity:
         self.ble_security.set_callback(self._on_ble_attack)
         self.ble_security.start()
         self._say("Monitor seguridad BLE activo.", C_TEXT_OK)
+
+        # ── Threat Correlation Engine — unified threat intelligence ──
+        self.threat_engine = ThreatCorrelationEngine(
+            on_level_change=self._on_threat_level_change,
+            on_insight=self._on_threat_insight,
+        )
+        # Wire up data sources
+        self.threat_engine.set_sources(
+            waf=lambda: self.security.get_latest() if self.security.connected else None,
+            wifi=lambda: self.wifi_defense.get_stats().__dict__ if self.wifi_defense else None,
+            ble=lambda: self.ble_security.get_stats() if self.ble_security else None,
+        )
+        self.threat_engine.start()
+
+        # ── Adaptive Defense — autonomous security response ──
+        self.adaptive_defense = AdaptiveDefense()
+        self.adaptive_defense.set_handlers(
+            emotion=lambda e: self.face.set_emotion(getattr(Emotion, e, Emotion.NEUTRAL)),
+            face_glow=lambda c: setattr(self, '_threat_glow_color', c),
+            say=lambda text, color: self._say(text, color),
+        )
+        # Link to threat engine
+        self.threat_engine._on_level_change = self.adaptive_defense.on_level_change
+        self.threat_engine._on_insight = self.adaptive_defense.on_insight
+        self._threat_glow_color = (0, 255, 100)  # Default green
+        self._say("Threat Correlation Engine activo. DEFCON 5.", C_TEXT_OK)
 
         # WPA2 Monitor — handshake capture, PMKID, KRACK detection
         self.wpa2_monitor = WPA2Monitor(
@@ -584,6 +703,21 @@ class TokioEntity:
 
         # Stand mode — filters intimate content for public display
         self._stand_mode = False
+
+        # Event persistence
+        if EventStore:
+            try:
+                self.event_store = EventStore()
+                print("[Entity] Event store initialized")
+            except Exception as e:
+                print(f"[Entity] Event store failed: {e}")
+                self.event_store = None
+        else:
+            self.event_store = None
+
+        # Health alerts
+        # _health_alerts initialized in health block above
+        self._stand_engine = None
 
         # Drone Vision Player (visual servoing — legacy camera-based)
         # NOT auto-started — conflicts with FPV. Only start via API when needed.
@@ -612,6 +746,9 @@ class TokioEntity:
         # Start drone monitor thread
         threading.Thread(target=self._drone_monitor_loop, daemon=True).start()
 
+        # Start HA health monitor thread
+        threading.Thread(target=self._ha_health_loop, daemon=True).start()
+
         self._say("Tokio online. Todos los sistemas operativos.", C_TEXT_OK)
 
     def _init_vision(self):
@@ -627,6 +764,22 @@ class TokioEntity:
     def _say(self, text: str, color: tuple = C_TEXT, source: str = "system"):
         self._voice_queue.append((text, color))
         self.thought_log.add(text, source=source)
+
+    def _on_threat_level_change(self, old_level, new_level, score):
+        """Called when DEFCON level changes."""
+        names = {1: "MAXIMUM", 2: "HIGH", 3: "INCREASED", 4: "ELEVATED", 5: "PEACE"}
+        colors = {1: (255, 0, 0), 2: (255, 100, 0), 3: (255, 180, 0),
+                  4: (0, 200, 255), 5: (0, 255, 100)}
+        level_name = names.get(new_level, "UNKNOWN")
+        color = colors.get(new_level, (0, 255, 255))
+        self._say(f"DEFCON {new_level}: {level_name}", color)
+        self._threat_glow_color = color
+
+    def _on_threat_insight(self, insight):
+        """Called when a cross-vector correlation is detected."""
+        color = (255, 40, 60) if insight.severity == "critical" else (255, 180, 0)
+        self._say(f"CORRELATION: {insight.title}", color)
+
 
     def _update_voice(self):
         now = time.monotonic()
@@ -661,6 +814,16 @@ class TokioEntity:
                 threat = JP_THREATS.get(ev.threat_type, ev.threat_type or "ataque")
                 self._say(random.choice(SAY_ATTACK).format(type=threat, ip=ev.ip), C_TEXT_DANGER, source="security")
 
+        # Feed WAF events into Threat Correlation Engine
+        if hasattr(self, "threat_engine") and self.threat_engine:
+            events_for_threat = self.security.get_events(limit=5)
+            for ev in events_for_threat:
+                self.threat_engine.push_event(
+                    "waf", ev.severity,
+                    f"{ev.threat_type or 'unknown'}: {ev.method} {ev.uri} from {ev.ip}",
+                    ev.blocked
+                )
+
     def _on_wifi_attack(self, attack_type: str, message: str, severity: str):
         """React to WiFi attack detected by defense module."""
         if severity == "critical":
@@ -680,6 +843,10 @@ class TokioEntity:
             "severity": severity,
         })
 
+        # Feed into Threat Correlation Engine
+        if hasattr(self, "threat_engine") and self.threat_engine:
+            self.threat_engine.push_event("wifi", severity, f"{attack_type}: {message}")
+
 
     def _on_ble_attack(self, attack_type: str, description: str):
         """React to Bluetooth attack detected by BLE security monitor."""
@@ -693,10 +860,18 @@ class TokioEntity:
         self._say(f"BLE: {description}", color, source="ble_security")
         self.face.set_emotion(emotion, "BLE Attack!")
 
+        # Feed into Threat Correlation Engine
+        if hasattr(self, "threat_engine") and self.threat_engine:
+            self.threat_engine.push_event("ble", sev, f"{attack_type}: {description}")
+
     def _on_wpa2_attack(self, attack_type: str, description: str):
         """React to WPA2 attack (handshake capture, PMKID, KRACK)."""
         self._say(f"WPA2: {description}", C_WIFI_DANGER, source="wpa2_monitor")
         self.face.set_emotion(Emotion.ANGRY, "WPA2 Attack!")
+
+        # Feed into Threat Correlation Engine
+        if hasattr(self, "threat_engine") and self.threat_engine:
+            self.threat_engine.push_event("wifi", "critical", f"WPA2: {attack_type}: {description}")
 
     def _on_ai_thought(self, text: str, emotion: str):
         """Receive real AI analysis from Claude."""
@@ -778,6 +953,81 @@ class TokioEntity:
             print(f"[AutoHeal] Restarted {service_name}")
         except Exception as e:
             print(f"[AutoHeal] Failed to restart {service_name}: {e}")
+
+    def _restart_docker(self, container_name: str):
+        """Restart a Docker container (auto-healing)."""
+        try:
+            subprocess.run(
+                ["docker", "restart", container_name],
+                timeout=30, capture_output=True,
+            )
+            print(f"[AutoHeal] Restarted Docker container {container_name}")
+        except Exception as e:
+            print(f"[AutoHeal] Failed to restart Docker {container_name}: {e}")
+
+    def _ha_health_loop(self):
+        """Monitor Home Assistant and auto-heal if it goes down."""
+        import requests as req
+        time.sleep(15)  # Wait for initial startup
+        ha_fail_count = 0
+        ha_was_available = False
+
+        while self._running:
+            try:
+                # Check if HA feed is available
+                if self.ha_feed.available:
+                    if not ha_was_available:
+                        self._say("Home Assistant conectado.", C_TEXT_OK)
+                        ha_was_available = True
+                    ha_fail_count = 0
+                else:
+                    # HA feed not available - check if HA Docker is running
+                    try:
+                        r = req.get("http://localhost:8123/api/", timeout=5,
+                                    headers={"Authorization": f"Bearer {os.getenv("TOKIO_HA_TOKEN", "")}"}
+                                   )
+                        if r.status_code == 200:
+                            # HA is running but feed lost connection - reconnect
+                            ha_fail_count = 0
+                            if not self.ha_feed.available:
+                                print("[AutoHeal] HA running but feed disconnected, reconnecting...")
+                                self.ha_feed.stop()
+                                time.sleep(1)
+                                # Re-init token
+                                self.ha_feed._token = os.getenv("TOKIO_HA_TOKEN", "")
+                                if self.ha_feed._token:
+                                    self.ha_feed._available = self.ha_feed._test_connection()
+                                    if self.ha_feed._available:
+                                        self.ha_feed.start()
+                                        self._say("Home Assistant reconectado.", C_TEXT_OK)
+                                        ha_was_available = True
+                        else:
+                            ha_fail_count += 1
+                    except Exception:
+                        ha_fail_count += 1
+
+                    # Auto-heal: restart HA Docker after 3 consecutive failures (~90s)
+                    if ha_fail_count == 3:
+                        print("[AutoHeal] Home Assistant down, restarting Docker container...")
+                        self._say("HA caido, reiniciando...", C_TEXT_WARN)
+                        self._restart_docker("homeassistant")
+                        time.sleep(30)  # HA takes ~30s to start
+                        # Try to reconnect feed
+                        self.ha_feed._token = os.getenv("TOKIO_HA_TOKEN", "")
+                        if self.ha_feed._token:
+                            self.ha_feed._available = self.ha_feed._test_connection()
+                            if self.ha_feed._available:
+                                self.ha_feed.start()
+                                self._say("Home Assistant restaurado.", C_TEXT_OK)
+                                ha_was_available = True
+                                ha_fail_count = 0
+                    elif ha_fail_count > 6:
+                        ha_fail_count = 0  # Reset, try again later
+
+            except Exception as e:
+                print(f"[AutoHeal] HA health check error: {e}")
+
+            time.sleep(30)
 
     def _drone_monitor_loop(self):
         import requests as req
@@ -1221,6 +1471,15 @@ class TokioEntity:
             identities = new_identities
 
         self._current_identities = identities
+
+        # Feed unknown persons to Threat Correlation Engine
+        if hasattr(self, "threat_engine") and self.threat_engine:
+            unknown_count = sum(1 for _, k, _ in identities if k is None)
+            if unknown_count > 0:
+                self.threat_engine.push_event(
+                    "vision", "medium",
+                    f"{unknown_count} unknown person(s) detected in camera"
+                )
 
         if self._register_mode and face_rects:
             if now - self._register_start > 15:
@@ -2682,6 +2941,10 @@ def main():
     parser.add_argument("--register", type=str, help="name:role")
     args = parser.parse_args()
 
+    # ── Singleton guard — prevents dual-instance camera conflicts ──
+    _acquire_singleton()
+    print(f"[Entity] Singleton lock acquired (PID {os.getpid()})")
+
     os.environ.setdefault("SDL_VIDEODRIVER", "wayland")
     os.environ.setdefault("XDG_RUNTIME_DIR", "/run/user/1000")
     os.environ.setdefault("WAYLAND_DISPLAY", "wayland-0")
@@ -2696,10 +2959,24 @@ def main():
         parts = args.register.split(":")
         app.start_register(parts[0], parts[1] if len(parts) > 1 else "visitor")
 
-    import signal
-    signal.signal(signal.SIGTERM, lambda *_: setattr(app, '_running', False))
-    signal.signal(signal.SIGINT, lambda *_: setattr(app, '_running', False))
-    app.run()
+    def _graceful_shutdown(signum, frame):
+        print(f"[Entity] Received signal {signum}, shutting down gracefully...")
+        app._running = False
+
+    signal.signal(signal.SIGTERM, _graceful_shutdown)
+    signal.signal(signal.SIGINT, _graceful_shutdown)
+
+    try:
+        app.run()
+    finally:
+        # Ensure camera is released on any exit
+        if hasattr(app, 'vision') and app.vision:
+            try:
+                app.vision.stop()
+            except Exception:
+                pass
+        _release_singleton()
+        print("[Entity] Shutdown complete.")
 
 
 if __name__ == "__main__":

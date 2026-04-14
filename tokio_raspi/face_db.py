@@ -422,19 +422,18 @@ class FaceDB:
             # Ambiguity check: best must be clearly better than second
             margin = second_dist - best_dist
             if second_dist <= MATCH_THRESHOLD and margin < 0.10:
-                import sys
-            print(f"[FaceDB] AMBIGUOUS: best={best_face.name} d={best_dist:.3f}, "
-                  f"second d={second_dist:.3f}, margin={margin:.3f}", flush=True)
+                print(f"[FaceDB] AMBIGUOUS: best={best_face.name} d={best_dist:.3f}, "
+                  f"second d={second_dist:.3f}, margin={margin:.3f}")
                 return None, 0.0
 
             confidence = max(0.0, 1.0 - best_dist)
             print(f"[FaceDB] MATCH: {best_face.name} d={best_dist:.3f} conf={confidence:.2f} "
-                  f"(gallery={len(best_face.embeddings)}, 2nd={second_dist:.3f})", flush=True)
+                  f"(gallery={len(best_face.embeddings)}, 2nd={second_dist:.3f})")
             self._update_sighting(best_face.face_id, confidence)
             return best_face, confidence
 
         if best_face:
-            print(f"[FaceDB] NO MATCH: closest={best_face.name} d={best_dist:.3f} > threshold={MATCH_THRESHOLD}", flush=True)
+            print(f"[FaceDB] NO MATCH: closest={best_face.name} d={best_dist:.3f} > threshold={MATCH_THRESHOLD}")
         return None, 0.0
 
     def _try_auto_enroll(self, face: KnownFace, new_embedding: np.ndarray):

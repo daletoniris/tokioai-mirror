@@ -40,6 +40,17 @@ from telegram.request import HTTPXRequest
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import httpx
 
+# Quick commands
+from telegram_quick_cmds import (
+    sitrep_command as _qc_sitrep,
+    health_command as _qc_health,
+    waf_command as _qc_waf,
+    drone_command as _qc_drone,
+    threats_command as _qc_threats,
+    entity_command as _qc_entity,
+    see_command as _qc_see,
+)
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -1322,6 +1333,36 @@ def main():
     application.add_handler(CommandHandler("allow", allow_command))
     application.add_handler(CommandHandler("deny", deny_command))
     application.add_handler(CommandHandler("acl", acl_command))
+
+    # Quick command handlers (instant, no LLM)
+    async def _wrap_sitrep(u, c):
+        if not await _guard_access(u): return
+        await _qc_sitrep(u, c)
+    async def _wrap_health(u, c):
+        if not await _guard_access(u): return
+        await _qc_health(u, c)
+    async def _wrap_waf(u, c):
+        if not await _guard_access(u): return
+        await _qc_waf(u, c)
+    async def _wrap_drone(u, c):
+        if not await _guard_access(u): return
+        await _qc_drone(u, c)
+    async def _wrap_threats(u, c):
+        if not await _guard_access(u): return
+        await _qc_threats(u, c)
+    async def _wrap_entity(u, c):
+        if not await _guard_access(u): return
+        await _qc_entity(u, c)
+    async def _wrap_see(u, c):
+        if not await _guard_access(u): return
+        await _qc_see(u, c)
+    application.add_handler(CommandHandler("sitrep", _wrap_sitrep))
+    application.add_handler(CommandHandler("health", _wrap_health))
+    application.add_handler(CommandHandler("waf", _wrap_waf))
+    application.add_handler(CommandHandler("drone", _wrap_drone))
+    application.add_handler(CommandHandler("threats", _wrap_threats))
+    application.add_handler(CommandHandler("entity", _wrap_entity))
+    application.add_handler(CommandHandler("see", _wrap_see))
 
     # Catch-all for unrecognized /commands — pass them to the engine as skills
     async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):

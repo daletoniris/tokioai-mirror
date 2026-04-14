@@ -65,11 +65,9 @@ def build_system_prompt(
             sections.append("# User Memory\n" + user_memory)
     memory = workspace.get_memory()
     if memory and memory.strip():
-        lines = memory.strip().splitlines()
-        recent = lines[-30:] if len(lines) > 30 else lines
-        sections.append(
-            "# General Memory\n" + "\n".join(recent)
-        )
+        memory_text = _build_smart_memory(memory)
+        if memory_text:
+            sections.append(memory_text)
 
     # 4. Available tools — just a count, details go via native tools param
     sections.append(
@@ -97,6 +95,67 @@ def build_system_prompt(
             sections.append(instr)
 
     return "\n\n---\n\n".join(sections)
+
+
+def _build_smart_memory(memory: str, max_lines: int = 60) -> str:
+    """Build categorized memory, prioritizing by type and recency.
+
+    Instead of just taking the last 30 lines, we:
+    1. Categorize entries by type (feedback, proyecto, referencia, preferencia)
+    2. Allocate budget per category (feedback > proyecto > referencia)
+    3. Always include recent entries regardless of category
+    """
+    import re
+    lines = [l.strip() for l in memory.strip().splitlines() if l.strip().startswith("- [")]
+    if not lines:
+        return ""
+
+    # Categorize
+    categories = {
+        "feedback": [],
+        "preferencia": [],
+        "proyecto": [],
+        "referencia": [],
+        "other": [],
+    }
+    for line in lines:
+        match = re.match(r'- \[\d{4}-\d{2}-\d{2} \d{2}:\d{2}\]\s*\[(\w+)\]', line)
+        cat = match.group(1) if match else "other"
+        if cat not in categories:
+            cat = "other"
+        categories[cat].append(line)
+
+    # Budget allocation (feedback and preferences are most important)
+    recent_budget = min(15, max_lines // 4)  # Always include recent
+    remaining = max_lines - recent_budget
+
+    budgets = {
+        "feedback": int(remaining * 0.30),      # 30% — corrections, user preferences about behavior
+        "preferencia": int(remaining * 0.15),    # 15% — user info
+        "proyecto": int(remaining * 0.35),       # 35% — project structure
+        "referencia": int(remaining * 0.20),     # 20% — facts, IPs, configs
+    }
+
+    selected = set()
+
+    # 1. Always include the most recent entries (any category)
+    for line in lines[-recent_budget:]:
+        selected.add(line)
+
+    # 2. Fill each category from newest to oldest
+    for cat, budget in budgets.items():
+        cat_entries = categories.get(cat, [])
+        for entry in reversed(cat_entries):
+            if len(selected) >= max_lines:
+                break
+            if entry not in selected and budget > 0:
+                selected.add(entry)
+                budget -= 1
+
+    # 3. Maintain original order
+    result = [l for l in lines if l in selected]
+
+    return "# General Memory\n" + "\n".join(result)
 
 
 def _build_runtime_context() -> str:

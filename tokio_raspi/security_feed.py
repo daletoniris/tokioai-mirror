@@ -166,18 +166,27 @@ class SecurityFeed:
 
         # Track event rate
         self._event_timestamps: list[float] = []
+        self._disabled = False
 
     def set_emotion_callback(self, callback):
         """Set callback for emotion changes: callback(emotion, message)."""
         self._emotion_callback = callback
 
+    MAX_AUTH_FAILURES = 5  # Stop trying after this many failures
+
     def start(self):
         if self._running:
             return
+        # Don't start if WAF is not configured
+        if not WAF_API_BASE or not WAF_PASS:
+            print("[SecurityFeed] Disabled — WAF not configured (set TOKIO_WAF_API + TOKIO_WAF_PASS)")
+            self._disabled = True
+            return
+        self._disabled = False
         self._running = True
         self._thread = threading.Thread(target=self._poll_loop, daemon=True)
         self._thread.start()
-        print(f"[SecurityFeed] Started (WAF: {WAF_API_BASE}, user: {WAF_USER}, pass: {'***' if WAF_PASS else 'MISSING!'})")
+        print(f"[SecurityFeed] Started (WAF: {WAF_API_BASE})")
 
     def stop(self):
         self._running = False
@@ -200,7 +209,11 @@ class SecurityFeed:
 
     @property
     def connected(self) -> bool:
-        return self._connected
+        return self._connected and not self._disabled
+
+    @property
+    def disabled(self) -> bool:
+        return self._disabled
 
     def _get_token(self) -> Optional[str]:
         if self._token and time.time() < self._token_expiry - 300:
@@ -225,8 +238,14 @@ class SecurityFeed:
             return self._token
         except Exception as e:
             self._auth_failures += 1
-            # Backoff: 10s, 30s, 60s, 120s, max 300s
-            backoff = min(300, 10 * (2 ** min(self._auth_failures, 5)))
+            if self._auth_failures >= self.MAX_AUTH_FAILURES:
+                print(f"[SecurityFeed] Auth failed {self._auth_failures}x — disabling feed. Fix WAF credentials and restart.")
+                self._running = False
+                self._disabled = True
+                self._error_msg = "Disabled: too many auth failures"
+                return None
+            # Backoff: 20s, 40s, 80s, max 300s
+            backoff = min(300, 20 * (2 ** min(self._auth_failures, 4)))
             self._auth_backoff = now + backoff
             if self._auth_failures <= 3:
                 print(f"[SecurityFeed] Auth failed: {e} (retry in {backoff}s)")
