@@ -4,7 +4,44 @@
 
 **Real-time health tracking with AI-powered medical device integration**
 
+*Part of the TokioAI Quantified Self / Biohacking philosophy*
+
 </div>
+
+---
+
+## Philosophy: Quantified Self & Biohacking
+
+TokioAI's health monitoring system is born from a personal philosophy of **quantified self** and **biohacking** — the practice of using technology, data, and self-experimentation to take control of your own health.
+
+> **"Don't just accept a diagnosis — understand it, measure it, track it, and improve it."**
+
+This isn't about replacing doctors. It's about being an **informed, data-driven patient** who actively participates in their own health journey. The creator of TokioAI has practiced this philosophy for years:
+
+- 🔴 **Built custom red light therapy (RLT) devices** — DIY panels using 660nm/850nm LEDs for skin, hair, and tissue regeneration, with measurable improvements tracked over months
+- 💊 **Avoided unnecessary surgery** through personal research — a diet protocol recommended by a doctor years ago, combined with self-monitoring, prevented an organ removal that was being recommended
+- 📊 **Avoided statins** through lifestyle optimization — instead of accepting lifelong medication for high cholesterol (250 mg/dL), used diet, exercise, and continuous monitoring to bring it down to 103 mg/dL naturally (**-58.8% reduction**)
+- 🧪 **Self-funded blood work** — regular testing with devices like the Accu-Answer iSaw to track trends without waiting for annual checkups
+
+### Why automate health tracking?
+
+Because **data you don't collect is data you can't act on.** Most people get blood work once a year, see the results for 5 minutes, and forget them. With TokioAI:
+
+- Every measurement is **stored with a timestamp**
+- Trends are **visible over weeks, months, years**
+- The AI **correlates metrics** (e.g., cholesterol dropping while HR improves = cardiovascular health improving)
+- Alerts are **proactive** — the system tells you when something is trending in the wrong direction, not after it's already a problem
+
+### Real Results
+
+| Metric | Before | After | Change | How |
+|--------|--------|-------|--------|-----|
+| Cholesterol | 250 mg/dL | 103 mg/dL | **-58.8%** | Diet + exercise + monitoring |
+| Resting HR | 86 bpm | 66 bpm | **-23.3%** | Cardiovascular fitness |
+| Uric Acid | 5.2 mg/dL | 3.42 mg/dL | **-34.2%** | Diet adjustment |
+| Blood Pressure | 130/85 | 102/73 | **-21.5%/-14.1%** | Lifestyle changes |
+
+These aren't theoretical numbers — they're real measurements tracked by TokioAI over time.
 
 ---
 
@@ -78,7 +115,7 @@ When all metrics are collected, TokioAI generates a comprehensive health analysi
 🏥 Health Report — April 14, 2026
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-📊 Score: 9.0/10 🟢
+📊 Overall Score: 9.0/10 🟢
 
 ❤️  Heart Rate     66 bpm      ↓ Improving (was 86)     10/10
 🩸  Blood Pressure 102/73 mmHg ↓ Improving               9/10
@@ -88,7 +125,8 @@ When all metrics are collected, TokioAI generates a comprehensive health analysi
 🔴  Hemoglobin     12.5 g/dL   → OK (Accu-Answer range)  8/10
 🟠  Uric Acid      3.42 mg/dL  ↓ -34% (was 5.2)         9/10
 
-🏆 Key Achievement: Cholesterol reduced from 250 to 103 mg/dL (-58.8%)
+🏆 Key Achievement: Cholesterol from 250 → 103 mg/dL (-58.8%)
+   without statins, through diet and lifestyle changes alone.
 ```
 
 ## BLE Smartwatch Integration
@@ -122,7 +160,7 @@ The smartwatch connects via Bluetooth Low Energy to the Raspberry Pi's BLE adapt
 ### Store a reading
 
 ```bash
-curl -X POST http://192.168.8.161:5000/health/db/store \
+curl -X POST http://localhost:5000/health/db/store \
   -H "Content-Type: application/json" \
   -d '{"metric": "glucose", "value": 100, "unit": "mg/dL", "source": "accu-answer-isaw"}'
 ```
@@ -131,10 +169,10 @@ curl -X POST http://192.168.8.161:5000/health/db/store \
 
 ```bash
 # Latest readings
-curl http://192.168.8.161:5000/health/db/latest
+curl http://localhost:5000/health/db/latest
 
 # History for a specific metric (last 30 days)
-curl "http://192.168.8.161:5000/health/db/history?metric=glucose&days=30"
+curl "http://localhost:5000/health/db/history?metric=glucose&days=30"
 ```
 
 ## CLI Commands
@@ -171,6 +209,7 @@ tokio> analyze my health trends for the last month
 - No health data is sent to external cloud services
 - Photos of medical devices are processed by Gemini Vision but not stored by Google
 - The health database is excluded from git via `.gitignore`
+- No personal health data is included in this repository — only anonymizable examples
 
 ## Setup
 
@@ -190,14 +229,38 @@ No setup needed — just send photos via Telegram. The agent automatically:
 1. Detects it's a medical device image
 2. Reads the value via Gemini Vision OCR
 3. Stores it in the health database
-4. Confirms with a summary table
+4. Confirms with a summary
 
-## Files
+### Health Database
 
-| File | Location | Description |
-|------|----------|-------------|
-| `health_monitor.py` | `tokio_raspi/` | BLE smartwatch connection and reading |
-| `health_db.py` | `tokio_raspi/` | SQLite database for health readings |
-| `health_alerts.py` | `tokio_raspi/` | Alert thresholds and notifications |
-| `raspi_vision_tools.py` | `tokio_agent/engine/tools/builtin/` | Agent tools: `health`, `health_store`, `health_full` |
+The database is created automatically on first use at `~/tokio_raspi/health_db.sqlite`:
 
+```sql
+CREATE TABLE health_readings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    metric TEXT NOT NULL,        -- 'glucose', 'cholesterol', etc.
+    value REAL NOT NULL,         -- numeric value
+    unit TEXT DEFAULT 'mg/dL',   -- unit of measurement
+    source TEXT DEFAULT 'manual', -- 'ble', 'accu-answer-isaw', 'manual'
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+## Future Roadmap
+
+- [ ] **OCR from Entity camera** — Point the iSaw at the Raspberry Pi camera for hands-free reading
+- [ ] **Voice input** — "Tokio, glucose 95" stored via speech recognition
+- [ ] **Correlation engine** — Automatic cross-metric analysis (e.g., diet changes vs cholesterol)
+- [ ] **Export to PDF** — Periodic health reports for doctor visits
+- [ ] **Multi-user support** — Track health for family members
+- [ ] **Integration with more devices** — Blood pressure monitors, scales, CGMs
+
+---
+
+<div align="center">
+
+*Built with the belief that everyone should have access to their own health data, in real-time, analyzed by AI, without depending on annual checkups or expensive platforms.*
+
+**Your body, your data, your control.**
+
+</div>

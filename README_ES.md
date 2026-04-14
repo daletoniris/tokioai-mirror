@@ -110,6 +110,17 @@ El mundo no necesita otro chatbot. Necesita un agente que pueda reiniciar tus co
 - **Seguridad primero** — Tres capas de proteccion porque un agente con acceso a bash es un arma.
 - **Tu infraestructura** — Self-hosted, sin dependencias SaaS, tus datos en tus maquinas.
 - **Simple > inteligente** — Python, Docker, PostgreSQL. Sin Kubernetes, sin microservicios.
+- **Quantified self** — Tu cuerpo, tus datos, tu control. El monitoreo de salud no es un feature — es una filosofia.
+
+### 🧬 Biohacking & Quantified Self
+
+TokioAI se extiende mas alla de la infraestructura hacia la **optimizacion de salud personal**. El sistema de monitoreo de salud encarna la filosofia del quantified self — usar tecnologia y datos para tomar control activo de tu propia salud a traves de medicion continua y auto-experimentacion.
+
+Esto significa construir tus propias herramientas (dispositivos DIY de terapia de luz roja, dashboards de monitoreo), investigar por cuenta propia, trackear cada metrica a lo largo del tiempo, y tomar decisiones de salud basadas en datos — no seguir prescripciones a ciegas. Resultados reales: colesterol reducido de 250 a 103 mg/dL sin estatinas, a traves de dieta y cambios de estilo de vida trackeados por TokioAI durante meses.
+
+> *"No aceptes un diagnostico — entendelo, medilo, trackealo y mejoralo."*
+
+Ver la [documentacion completa de Health Monitoring →](docs/health-monitoring/HEALTH-MONITORING.md)
 
 ---
 

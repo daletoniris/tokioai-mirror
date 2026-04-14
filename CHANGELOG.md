@@ -46,7 +46,12 @@ All notable changes to TokioAI are documented here.
 
 ---
 
-### 🏥 Health Monitoring System
+### 🏥 Health Monitoring System — Quantified Self & Biohacking
+
+**Philosophy**
+- Quantified self / biohacking approach to personal health optimization
+- Continuous self-measurement, data-driven health decisions
+- Real results: cholesterol 250→103 mg/dL (-58.8%) without statins
 
 **Accu-Answer iSaw 4-in-1 Integration**
 - AI-powered OCR: send photo of iSaw device via Telegram → auto-read and store
@@ -89,8 +94,8 @@ All notable changes to TokioAI are documented here.
 - Autonomous modes: obstacle avoidance, line tracking, patrol patterns
 
 **Network Access**
-- LAN: `192.168.8.107:5002`
-- Tailscale: `100.76.145.124:5002`
+- LAN: `<local-ip>:5002`
+- Tailscale: `<tailscale-ip>:5002`
 
 ---
 

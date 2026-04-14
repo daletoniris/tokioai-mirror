@@ -176,6 +176,17 @@ TokioAI is built by a security researcher who got tired of switching between 15 
 - **Security first** — Three layers of protection because an agent with bash access is a weapon. Treat it like one.
 - **Own your infra** — Self-hosted, no SaaS dependencies, your data stays on your machines.
 - **Simple > clever** — Python, Docker, PostgreSQL. No Kubernetes, no microservices, no buzzwords.
+- **Quantified self** — Your body, your data, your control. Health monitoring isn't a feature — it's a philosophy.
+
+### 🧬 Biohacking & Quantified Self
+
+TokioAI extends beyond infrastructure into **personal health optimization**. The health monitoring system embodies the quantified self philosophy — using technology and data to take active control of your own health through continuous self-measurement and self-experimentation.
+
+This means building your own tools (DIY red light therapy devices, custom monitoring dashboards), doing your own research, tracking every metric over time, and making data-driven health decisions — not blindly following prescriptions. Real results: cholesterol reduced from 250 to 103 mg/dL without statins, through diet and lifestyle changes tracked by TokioAI over months.
+
+> *"Don't just accept a diagnosis — understand it, measure it, track it, and improve it."*
+
+See the full [Health Monitoring documentation →](docs/health-monitoring/HEALTH-MONITORING.md)
 
 ---
 
