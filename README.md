@@ -380,12 +380,21 @@ Real-time health tracking with two data sources:
 📷 Photo of device → 📱 Telegram → 🤖 Gemini Vision OCR → 💾 Health DB → 📺 Entity Display
 ```
 
-### Real measurements
+### Real measurements from Accu-Answer iSaw 4-in-1
 
-| Glucose | Cholesterol | Hemoglobin | Uric Acid |
-|:-------:|:-----------:|:----------:|:---------:|
-| ![Glucose](docs/health-monitoring/images/accu-answer-glucose-100.jpg) | ![Cholesterol](docs/health-monitoring/images/accu-answer-cholesterol-103.jpg) | ![Hemoglobin](docs/health-monitoring/images/accu-answer-hemoglobin-12.5.jpg) | ![Uric Acid](docs/health-monitoring/images/accu-answer-uric-acid-3.42.jpg) |
-| 100 mg/dL 🟢 | 103 mg/dL 🟢 | 12.5 g/dL 🟢 | 3.42 mg/dL 🟢 |
+<p align="center">
+<img src="docs/health-monitoring/images/accu-answer-glucose-100.jpg" alt="Glucose 100 mg/dL" width="160">
+<img src="docs/health-monitoring/images/accu-answer-cholesterol-103.jpg" alt="Cholesterol 103 mg/dL" width="160">
+<img src="docs/health-monitoring/images/accu-answer-hemoglobin-12.5.jpg" alt="Hemoglobin 12.5 g/dL" width="160">
+<img src="docs/health-monitoring/images/accu-answer-uric-acid-3.42.jpg" alt="Uric Acid 3.42 mg/dL" width="160">
+</p>
+
+| Metric | Value | Status |
+|--------|-------|:------:|
+| 🔵 Glucose | 100 mg/dL | 🟢 Normal |
+| 🟣 Cholesterol | 103 mg/dL | 🟢 Excellent (was 250!) |
+| 🔴 Hemoglobin | 12.5 g/dL | 🟢 Normal |
+| 🟠 Uric Acid | 3.42 mg/dL | 🟢 Normal |
 
 ### Entity Health Dashboard (Live)
 

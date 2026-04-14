@@ -100,12 +100,21 @@ The [Accu-Answer iSaw 4-in-1](https://www.accuanswer.com/) is a multi-parameter 
 4. **Agent stores** the reading in the health database with timestamp
 5. **Entity displays** the latest values on its live panel
 
-### Example readings
+### Example readings from Accu-Answer iSaw 4-in-1
 
-| Glucose | Cholesterol | Hemoglobin | Uric Acid |
-|:-------:|:-----------:|:----------:|:---------:|
-| ![Glucose](images/accu-answer-glucose-100.jpg) | ![Cholesterol](images/accu-answer-cholesterol-103.jpg) | ![Hemoglobin](images/accu-answer-hemoglobin-12.5.jpg) | ![Uric Acid](images/accu-answer-uric-acid-3.42.jpg) |
-| 100 mg/dL 🟢 | 103 mg/dL 🟢 | 12.5 g/dL 🟢 | 3.42 mg/dL 🟢 |
+<p align="center">
+<img src="images/accu-answer-glucose-100.jpg" alt="Glucose 100 mg/dL" width="160">
+<img src="images/accu-answer-cholesterol-103.jpg" alt="Cholesterol 103 mg/dL" width="160">
+<img src="images/accu-answer-hemoglobin-12.5.jpg" alt="Hemoglobin 12.5 g/dL" width="160">
+<img src="images/accu-answer-uric-acid-3.42.jpg" alt="Uric Acid 3.42 mg/dL" width="160">
+</p>
+
+| Metric | Value | Status |
+|--------|-------|:------:|
+| 🔵 Glucose | 100 mg/dL | 🟢 Normal |
+| 🟣 Cholesterol | 103 mg/dL | 🟢 Excellent (was 250!) |
+| 🔴 Hemoglobin | 12.5 g/dL | 🟢 Normal |
+| 🟠 Uric Acid | 3.42 mg/dL | 🟢 Normal |
 
 ### Entity Health Dashboard
 
