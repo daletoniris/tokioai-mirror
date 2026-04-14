@@ -387,6 +387,12 @@ Real-time health tracking with two data sources:
 | ![Glucose](docs/health-monitoring/images/accu-answer-glucose-100.jpg) | ![Cholesterol](docs/health-monitoring/images/accu-answer-cholesterol-103.jpg) | ![Hemoglobin](docs/health-monitoring/images/accu-answer-hemoglobin-12.5.jpg) | ![Uric Acid](docs/health-monitoring/images/accu-answer-uric-acid-3.42.jpg) |
 | 100 mg/dL 🟢 | 103 mg/dL 🟢 | 12.5 g/dL 🟢 | 3.42 mg/dL 🟢 |
 
+### Entity Health Dashboard (Live)
+
+<img src="docs/health-monitoring/images/entity-health-dashboard.jpg" alt="TokioAI Entity — Health Dashboard showing real-time vitals and lab results" width="700">
+
+*The Entity displays real-time vitals from the BLE smartwatch and lab results from the Accu-Answer iSaw, all on the Raspberry Pi 5 screen.*
+
 ### AI Health Analysis
 
 ```

@@ -311,6 +311,12 @@ Monitoreo de salud en tiempo real con dos fuentes de datos:
 | ![Glucosa](docs/health-monitoring/images/accu-answer-glucose-100.jpg) | ![Colesterol](docs/health-monitoring/images/accu-answer-cholesterol-103.jpg) | ![Hemoglobina](docs/health-monitoring/images/accu-answer-hemoglobin-12.5.jpg) | ![Ácido Úrico](docs/health-monitoring/images/accu-answer-uric-acid-3.42.jpg) |
 | 100 mg/dL 🟢 | 103 mg/dL 🟢 | 12.5 g/dL 🟢 | 3.42 mg/dL 🟢 |
 
+### Entity Health Dashboard (En vivo)
+
+<img src="docs/health-monitoring/images/entity-health-dashboard.jpg" alt="TokioAI Entity — Dashboard de salud mostrando signos vitales y resultados de laboratorio en tiempo real" width="700">
+
+*El Entity muestra signos vitales en tiempo real del smartwatch BLE y resultados de laboratorio del Accu-Answer iSaw, todo en la pantalla de la Raspberry Pi 5.*
+
 ### Análisis de Salud con IA
 
 ```

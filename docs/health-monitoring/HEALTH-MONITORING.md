@@ -107,6 +107,14 @@ The [Accu-Answer iSaw 4-in-1](https://www.accuanswer.com/) is a multi-parameter 
 | ![Glucose](images/accu-answer-glucose-100.jpg) | ![Cholesterol](images/accu-answer-cholesterol-103.jpg) | ![Hemoglobin](images/accu-answer-hemoglobin-12.5.jpg) | ![Uric Acid](images/accu-answer-uric-acid-3.42.jpg) |
 | 100 mg/dL 🟢 | 103 mg/dL 🟢 | 12.5 g/dL 🟢 | 3.42 mg/dL 🟢 |
 
+### Entity Health Dashboard
+
+The Entity displays all health data in real-time on the Raspberry Pi 5 screen:
+
+<img src="images/entity-health-dashboard.jpg" alt="TokioAI Entity — Health Dashboard" width="700">
+
+*Live vitals from BLE smartwatch + lab results from Accu-Answer iSaw, displayed on the Entity's face screen.*
+
 ### AI Analysis Example
 
 When all metrics are collected, TokioAI generates a comprehensive health analysis:
