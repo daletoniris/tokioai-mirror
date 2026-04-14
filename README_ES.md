@@ -29,11 +29,26 @@
 
 <br>
 
-*TokioAI conecta Claude, GPT o Gemini a tus servidores, bases de datos, contenedores Docker, dispositivos IoT, drones, herramientas de seguridad e infraestructura cloud a traves de una arquitectura segura de tool-calling. Hecho para hackers, pentesters e investigadores de seguridad.*
+*TokioAI conecta Claude, GPT, Gemini, OpenRouter u Ollama a tus servidores, bases de datos, contenedores Docker, dispositivos IoT, drones, robots, dispositivos médicos, herramientas de seguridad e infraestructura cloud. 5 proveedores LLM, 37 tools, CLI streaming, monitoreo de salud, control de robótica, auto-compactación, subagentes y self-healing — hecho para hackers, pentesters e investigadores de seguridad.*
 
-[Inicio Rapido](#-inicio-rapido) · [Features](#-features) · [Control de Drone](#-control-de-drone) · [Herramientas de Seguridad](#-herramientas-de-seguridad-ofensivas-y-defensivas) · [Terminal SOC](#-terminal-soc-v2) · [WAF Dashboard](#-waf-dashboard) · [Arquitectura](#-arquitectura)
+[Inicio Rapido](#-inicio-rapido) · [Features](#-features) · [Novedades v4.0](#-novedades-v40) · [Control de Drone](#-control-de-drone) · [Robótica](#-robótica) · [Monitoreo de Salud](#-monitoreo-de-salud) · [Herramientas de Seguridad](#-herramientas-de-seguridad-ofensivas-y-defensivas) · [Terminal SOC](#-terminal-soc-v2) · [Arquitectura](#-arquitectura)
 
 </div>
+
+---
+
+## Novedades v4.0
+
+| Área | Mejoras |
+|------|---------|
+| 🖥️ **CLI v4.0** | Terminal sin cuelgues (3 capas de restore), 15 slash commands, cost tracking, modo ilimitado por default |
+| 🏥 **Salud** | Smartwatch BLE (HR/BP/SpO2) + Accu-Answer iSaw (glucosa/colesterol/hemoglobina/ácido úrico) via OCR con IA |
+| 🤖 **Robótica** | PiCar-X v2.0 con safety proxy, 36 tools, esquiva obstáculos, line tracking, patrulla |
+| 🛡️ **Entity** | Singleton con flock, self-healing via systemctl, auto-restart de HA, shutdown graceful |
+| 🚁 **Drone** | Timeouts variables, errores accionables, FPV con detección de personas |
+| 📱 **Telegram** | OCR automático de dispositivos médicos, almacenamiento directo en DB |
+
+Ver el [CHANGELOG](CHANGELOG.md) completo para todos los detalles.
 
 ---
 
@@ -236,6 +251,70 @@ GET  /drone/wifi/status     — Estado actual de conexion WiFi
 ```
 
 ---
+
+## 🤖 Robótica
+
+TokioAI controla robots físicos a través de safety proxies en Raspberry Pi.
+
+### PiCar-X v2.0 (Sunfounder)
+
+| Spec | Detalle |
+|------|---------|
+| Plataforma | Sunfounder PiCar-X v2.0 |
+| Computadora | Raspberry Pi 5 |
+| Sensores | Ultrasonido + 3x Escala de grises |
+| Cámara | IMX219 con pan/tilt |
+| Safety Proxy | Puerto 5002, servicio systemd |
+
+```bash
+# Control por lenguaje natural
+tokio> mové el picar 30cm hacia adelante
+tokio> esquivá obstáculos
+tokio> hacelo bailar!
+tokio> /picar    # Estado rápido
+```
+
+📖 [Documentación completa de Robótica →](docs/ROBOTICS.md)
+
+---
+
+## 🏥 Monitoreo de Salud
+
+Monitoreo de salud en tiempo real con dos fuentes de datos:
+
+| Fuente | Métricas | Conexión |
+|--------|----------|----------|
+| **Smartwatch BLE** | HR, Presión, SpO2, Pasos | Bluetooth Low Energy (continuo) |
+| **Accu-Answer iSaw 4-in-1** | Glucosa, Colesterol, Hemoglobina, Ácido Úrico | Foto por Telegram → OCR con IA |
+
+### Cómo funciona la integración del iSaw
+
+```
+📷 Foto del dispositivo → 📱 Telegram → 🤖 Gemini Vision OCR → 💾 Health DB → 📺 Pantalla Entity
+```
+
+### Mediciones reales
+
+| Glucosa | Colesterol | Hemoglobina | Ácido Úrico |
+|:-------:|:-----------:|:----------:|:---------:|
+| ![Glucosa](docs/health-monitoring/images/accu-answer-glucose-100.jpg) | ![Colesterol](docs/health-monitoring/images/accu-answer-cholesterol-103.jpg) | ![Hemoglobina](docs/health-monitoring/images/accu-answer-hemoglobin-12.5.jpg) | ![Ácido Úrico](docs/health-monitoring/images/accu-answer-uric-acid-3.42.jpg) |
+| 100 mg/dL 🟢 | 103 mg/dL 🟢 | 12.5 g/dL 🟢 | 3.42 mg/dL 🟢 |
+
+### Análisis de Salud con IA
+
+```
+🏥 Score de Salud: 9.0/10 🟢
+
+🏆 Logro: Colesterol de 250 → 103 mg/dL (-58.8%)
+❤️  Pulso: 66 bpm (antes 86 — mejorando)
+🩸  Presión: 102/73 mmHg — óptima
+🫁  SpO2: 97% — normal
+```
+
+📖 [Documentación completa de Salud →](docs/health-monitoring/HEALTH-MONITORING.md)
+
+---
+
 
 ## Herramientas de Seguridad Ofensivas y Defensivas
 

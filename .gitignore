@@ -43,3 +43,22 @@ workspace/plugins/
 Reporte_*.pdf
 TokioAI_*.pdf
 *.iso
+
+# Backup files
+*.backup
+*.backup2
+*.backup_v*
+*_backup*.py
+
+# Raw uploads (copies in docs/ for public)
+health_images/
+
+# Tokio memory (private)
+tokio_raspi/tokio_memory.json
+tokio_raspi/faces.db
+tokio_raspi/face_photos/
+
+# Vertex credentials
+tokio_raspi/vertex-credentials.json
+tokio_cli/interactive_v4.py
+tokio_cli/upgrade_cli_v4.sh

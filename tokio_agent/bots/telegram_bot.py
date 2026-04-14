@@ -530,6 +530,21 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await _safe_reply_text(update, "No pude descargar la imagen. Reintenta.")
         return
 
+    # Auto-save ALL photos to /workspace/uploads/photos/ for later use
+    try:
+        import datetime as _dt
+        _photos_dir = pathlib.Path("/workspace/uploads/photos")
+        _photos_dir.mkdir(parents=True, exist_ok=True)
+        _ts = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+        for _idx, _img in enumerate(images_payload):
+            _ext = "png" if "png" in _img["media_type"] else "jpg"
+            _fname = f"{_ts}_{_idx}.{_ext}"
+            _fpath = _photos_dir / _fname
+            _fpath.write_bytes(base64.b64decode(_img["data"]))
+            logger.info(f"Photo saved: {_fpath}")
+    except Exception as _save_err:
+        logger.warning(f"Could not save photo: {_save_err}")
+
     # Build prompt
     prompt = caption if caption else "Analiza esta imagen. Describe lo que ves, extrae texto visible (OCR), y resalta informacion tecnica o de seguridad."
 

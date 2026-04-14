@@ -29,61 +29,84 @@
 
 <br>
 
-*TokioAI connects Claude, GPT, Gemini, OpenRouter, or Ollama to your servers, databases, Docker containers, IoT devices, drones, security tools, and cloud infrastructure through native tool-calling. 5 LLM providers, 30+ tools, streaming CLI, auto-compaction, subagents, and self-healing — built for hackers, pentesters, and security researchers.*
+*TokioAI connects Claude, GPT, Gemini, OpenRouter, or Ollama to your servers, databases, Docker containers, IoT devices, drones, robots, medical devices, security tools, and cloud infrastructure through native tool-calling. 5 LLM providers, 37 tools, streaming CLI, health monitoring, robotics control, auto-compaction, subagents, and self-healing — built for hackers, pentesters, and security researchers.*
 
-[Getting Started](#-quick-start) · [Features](#-features) · [What's New](#-whats-new-in-v30) · [Drone Control](#-drone-control) · [Security Tools](#-offensive--defensive-security-tools) · [SOC Terminal](#-soc-terminal-v2) · [WAF Dashboard](#-waf-dashboard) · [Architecture](#-architecture)
+[Getting Started](#-quick-start) · [Features](#-features) · [What's New](#-whats-new-in-v40) · [Drone Control](#-drone-control) · [Robotics](#-robotics) · [Health Monitoring](#-health-monitoring) · [Security Tools](#-offensive--defensive-security-tools) · [SOC Terminal](#-soc-terminal-v2) · [WAF Dashboard](#-waf-dashboard) · [Architecture](#-architecture)
 
 </div>
 
 ---
 
-## What's New in v3.0
+## What's New in v4.0
 
 <table>
 <tr>
 <td width="50%">
 
-**Native Tool Use**
-- Switched from regex-based `TOOL:name({})` parsing to structured JSON tool calls via LLM API
-- Configurable rounds (25 default, 0 = unlimited)
-- Parallel tool execution for independent operations
-- ~21% reduction in prompt tokens
+**🖥️ CLI v4.0 — Zero Keyboard Hangs**
+- 3-layer terminal restore (golden state + stty sane + cursor)
+- `_drain_stdin()` clears keyboard buffer after every tool
+- **Unlimited by default** — no round or time limits
+- 15 slash commands (instant, no LLM needed)
+- Cost tracking per response + session totals
+- Tab completion for all commands and tool names
 
 </td>
 <td width="50%">
 
-**5 LLM Providers**
-- All providers now support native tool use and streaming
-- **OpenRouter** — access 200+ models (Claude, GPT, Llama, Mixtral, DeepSeek)
-- **Ollama** — run LLMs locally for free, auto-detects models
-- Automatic fallback chain with retries across all providers
+**🏥 Health Monitoring**
+- **BLE Smartwatch** — continuous HR, BP, SpO2 tracking
+- **Accu-Answer iSaw 4-in-1** — glucose, cholesterol, hemoglobin, uric acid
+- Send a photo via Telegram → AI reads the display → auto-stores in DB
+- 1,900+ readings, 7 metrics, trend analysis with scoring
+- [Full documentation →](docs/health-monitoring/HEALTH-MONITORING.md)
 
 </td>
 </tr>
 <tr>
 <td>
 
-**Claude Code-style CLI**
-- Streaming responses (token by token)
-- **Unlimited mode** — no round or time limits (`--unlimited`)
-- **Persistent mode** — keeps working until you say "stop" (`--persistent`)
-- Escape to cancel running requests
-- Tool icons with real-time execution feedback
-- Status bar, readline history, sensitive data masking
+**🤖 Robotics (PiCar-X)**
+- Sunfounder PiCar-X v2.0 with safety proxy on Raspberry Pi 5
+- 36 tools: move, patrol, dance, obstacle avoidance, line tracking
+- Natural language: *"move forward 30cm"*, *"avoid obstacles"*
+- Speed/duration limits, emergency kill, audit log
+- [Full documentation →](docs/ROBOTICS.md)
 
 </td>
 <td>
 
-**Auto-Compaction & Memory**
-- Context auto-compacts at 80% capacity (circuit breaker: 3 per 5min)
+**🛡️ Entity Hardening**
+- Singleton with `flock` — no more dual-instance camera conflicts
+- Self-healing via `systemctl restart` (not fragile scripts)
+- HA auto-restart if Docker container goes down
+- SecurityFeed auto-disables without WAF (no error spam)
+- Graceful shutdown with signal handlers
+
+</td>
+</tr>
+<tr>
+<td>
+
+**5 LLM Providers** *(from v3.0)*
+- Anthropic, OpenAI, Google, OpenRouter, Ollama
+- Native tool use and streaming on all providers
+- Automatic fallback chain with retries
+
+</td>
+<td>
+
+**Auto-Compaction & Memory** *(from v3.0)*
+- Context auto-compacts at 80% capacity
 - Background memory extraction after each response
-- Per-user preference and memory isolation
 - Subagent workers for parallel task execution
 - Self-healing engine (auto-restarts crashed services)
 
 </td>
 </tr>
 </table>
+
+See the full [CHANGELOG](CHANGELOG.md) for all details.
 
 ---
 
@@ -185,7 +208,7 @@ TokioAI is built by a security researcher who got tired of switching between 15 
 <tr>
 <td>
 
-### 30+ Built-in Tools
+### 37 Built-in Tools
 | Category | Tools |
 |:---------|:------|
 | System | `bash`, `python`, `read_file`, `write_file`, `edit_file` |
@@ -199,10 +222,13 @@ TokioAI is built by a security researcher who got tired of switching between 15 
 | Docs | `document` (generate PDF, PPTX, CSV) |
 | Calendar | `calendar` (Google Calendar) |
 | Orchestration | `subagent` (parallel worker spawning) |
-| Vision | `raspi_vision` (camera, AI brain, health data) |
+| Vision | `raspi_vision` (camera, AI brain, health) |
+| **Health** | `health`, `health_store`, `health_full` (BLE + lab) |
 | **Drone** | `drone` (DJI Tello via safety proxy) |
+| **Robotics** | `picar` (PiCar-X via safety proxy) |
 | **Security** | `security` (nmap, vuln scan, WiFi defense) |
 | **Coffee** | `coffee` (IoT coffee machine via GPIO) |
+| **Sitrep** | `sitrep` (full situation report, all systems) |
 
 </td>
 <td>
@@ -299,6 +325,79 @@ GET  /drone/wifi/status     — Current WiFi connection status
 ```
 
 ---
+
+## 🤖 Robotics
+
+TokioAI controls physical robots through safety proxies on Raspberry Pi. Each robot has rate limiting, emergency kill switch, and full audit logging.
+
+### PiCar-X v2.0
+
+| Feature | Detail |
+|---------|--------|
+| Platform | Sunfounder PiCar-X v2.0 |
+| Computer | Raspberry Pi 5 |
+| Sensors | Ultrasonic + 3x Grayscale |
+| Camera | IMX219 with pan/tilt |
+| Proxy | Port 5002, systemd service |
+
+```bash
+# Natural language robot control
+tokio> move the picar forward 30cm
+tokio> start obstacle avoidance
+tokio> make it dance!
+tokio> /picar    # Quick status
+```
+
+**Modes:** Manual control, obstacle avoidance, line tracking, patrol patterns (square/zigzag/circle), dance
+
+📖 [Full Robotics Documentation →](docs/ROBOTICS.md)
+
+---
+
+## 🏥 Health Monitoring
+
+Real-time health tracking with two data sources:
+
+| Source | Metrics | Connection |
+|--------|---------|------------|
+| **BLE Smartwatch** | HR, Blood Pressure, SpO2, Steps | Bluetooth Low Energy (continuous) |
+| **Accu-Answer iSaw 4-in-1** | Glucose, Cholesterol, Hemoglobin, Uric Acid | Photo via Telegram → AI OCR |
+
+### How the iSaw integration works
+
+```
+📷 Photo of device → 📱 Telegram → 🤖 Gemini Vision OCR → 💾 Health DB → 📺 Entity Display
+```
+
+### Real measurements
+
+| Glucose | Cholesterol | Hemoglobin | Uric Acid |
+|:-------:|:-----------:|:----------:|:---------:|
+| ![Glucose](docs/health-monitoring/images/accu-answer-glucose-100.jpg) | ![Cholesterol](docs/health-monitoring/images/accu-answer-cholesterol-103.jpg) | ![Hemoglobin](docs/health-monitoring/images/accu-answer-hemoglobin-12.5.jpg) | ![Uric Acid](docs/health-monitoring/images/accu-answer-uric-acid-3.42.jpg) |
+| 100 mg/dL 🟢 | 103 mg/dL 🟢 | 12.5 g/dL 🟢 | 3.42 mg/dL 🟢 |
+
+### AI Health Analysis
+
+```
+🏥 Health Score: 9.0/10 🟢
+
+🏆 Key Achievement: Cholesterol 250 → 103 mg/dL (-58.8%)
+❤️  Heart Rate: 66 bpm (was 86 — improving)
+🩸  Blood Pressure: 102/73 mmHg — optimal
+🫁  SpO2: 97% — normal
+```
+
+```bash
+# CLI commands
+tokio> /health              # Quick health status
+tokio> health report        # Full analysis with trends
+tokio> store glucose 95     # Manual entry
+```
+
+📖 [Full Health Documentation →](docs/health-monitoring/HEALTH-MONITORING.md)
+
+---
+
 
 ## Offensive & Defensive Security Tools
 
@@ -1250,21 +1349,32 @@ tokioai/
 │               ├── gcp_tools.py       #   GCP WAF + Compute
 │               ├── host_tools.py      #   SSH remote control
 │               ├── iot_tools.py       #   Home Assistant
-│               ├── drone_proxy_tools.py  # Drone via safety proxy
-│               ├── security_tools.py  #   Pentest & defense tools
-│               ├── coffee_tools.py    #   IoT coffee machine
-│               └── ...               #   + more tool files
+│               ├── drone_proxy_tools.py     # Drone via safety proxy
+│               ├── drone_secure_tools.py    # Drone with variable timeouts
+│               ├── picar_tools.py           # PiCar-X robot (36 tools)
+│               ├── raspi_vision_tools.py    # Entity + health + AI brain
+│               ├── security_tools.py        # Pentest & defense tools
+│               ├── coffee_tools.py          # IoT coffee machine
+│               ├── sitrep_tool.py           # Situation report (all systems)
+│               └── ...                      # + more tool files
 ├── tokio_cli/
-│   └── interactive.py                 # Claude Code-style streaming CLI
+│   └── interactive.py                 # CLI v4.0 (1963 lines, 15 slash commands)
 ├── tokio_raspi/                       # Raspberry Pi entity system
 │   ├── main.py                        #   TokioEntity (face+camera+WAF+drone)
 │   ├── tokio_face.py                  #   Animated face rendering
 │   ├── vision_engine.py               #   Hailo-8L YOLOv8 inference
 │   ├── face_db.py                     #   Face recognition (SQLite)
 │   ├── gesture_detector.py            #   Hand gesture detection
+│   ├── health_monitor.py              #   BLE smartwatch (HR/BP/SpO2)
+│   ├── health_db.py                   #   SQLite health database
+│   ├── health_alerts.py               #   Alert thresholds
+│   ├── ai_brain.py                    #   AI Brain (corrections, teaching)
 │   ├── security_feed.py               #   WAF attack feed
+│   ├── wifi_defense.py                #   WiFi deauth/evil twin defense
 │   ├── api_server.py                  #   Flask API (:5000)
-│   ├── drone_safety_proxy.py          #   Drone proxy (:5001)
+│   ├── picar_proxy.py                 #   PiCar-X safety proxy (:5002)
+│   ├── drone_safety_proxy.py          #   Drone safety proxy (:5001)
+│   ├── drone_fpv.py                   #   Drone FPV (first-person view)
 │   └── drone_tracker.py               #   Visual drone tracking
 ├── tokio_cloud/                       # WAF deployment (100% OPTIONAL)
 │   ├── gcp-live/                      # Production WAF stack
@@ -1279,9 +1389,14 @@ tokioai/
 │   │   └── deploy.sh                  #   Deployment script
 │   └── waf-deployment/                # WAF setup docs + ModSecurity
 ├── docs/                              # Documentation
+│   ├── ROBOTICS.md                    #   Robot integration guide
+│   ├── health-monitoring/             #   Health system docs + images
+│   │   ├── HEALTH-MONITORING.md       #     Full health documentation
+│   │   └── images/                    #     Accu-Answer iSaw photos
 │   ├── TAILSCALE-MESH.md              #   Mesh VPN setup guide
 │   ├── HOME-ASSISTANT.md              #   IoT integration guide
 │   └── tokioai-architecture.png       #   Architecture diagram
+├── CHANGELOG.md                       # Version history
 ├── tests/                             # Test suite (10 test files)
 ├── docker-compose.yml
 ├── docker-compose.cloud.yml           # Cloud deploy with shared postgres
