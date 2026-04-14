@@ -756,7 +756,7 @@ class TokioAgent:
             parts = user_message.split(maxsplit=1)
             cmd = parts[0][1:]
             args = parts[1] if len(parts) > 1 else ""
-            skill = self.skill_registry.resolve(cmd)
+            skill = self.skill_registry.get(cmd)
             if skill:
                 extra.append(skill.get_prompt(args))
 
