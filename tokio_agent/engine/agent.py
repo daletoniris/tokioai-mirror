@@ -54,8 +54,8 @@ TOOL_CALL_SIMPLE_RE = re.compile(
 class TokioAgent:
     """The main autonomous agent."""
 
-    MAX_TOOL_ROUNDS = 25  # Max consecutive tool-use rounds per message (0 = unlimited)
-    MAX_TOTAL_TIME = 600  # Max seconds per message (0 = unlimited)
+    MAX_TOOL_ROUNDS = 0  # Max consecutive tool-use rounds per message (0 = unlimited)
+    MAX_TOTAL_TIME = 0  # Max seconds per message (0 = unlimited)
 
     def __init__(
         self,

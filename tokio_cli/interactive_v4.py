@@ -1663,8 +1663,8 @@ def _read_multiline(first_line: str) -> str:
 # Main Loop — The heart of the CLI
 # ═══════════════════════════════════════════════════════
 
-async def run_interactive(session_id: Optional[str] = None, max_rounds: int = 25,
-                          max_time: int = 600, persistent: bool = False):
+async def run_interactive(session_id: Optional[str] = None, max_rounds: int = 100,
+                          max_time: int = 3600, persistent: bool = False):
     """Run the interactive CLI loop."""
     global _terminal_saved_state
 
@@ -1727,6 +1727,10 @@ async def run_interactive(session_id: Optional[str] = None, max_rounds: int = 25
         if not sid:
             sid = f"cli-{int(time.time())}"
 
+    # Persistent mode = unlimited rounds (don't cut mid-task)
+    if persistent:
+        max_rounds = 0
+        max_time = 0
     agent.MAX_TOOL_ROUNDS = max_rounds
     agent.MAX_TOTAL_TIME = max_time
     _persistent_mode = persistent
@@ -1785,9 +1789,9 @@ async def run_interactive(session_id: Optional[str] = None, max_rounds: int = 25
             continue
         if lower == "unlimited":
             if agent.MAX_TOOL_ROUNDS == 0:
-                agent.MAX_TOOL_ROUNDS = 25
-                agent.MAX_TOTAL_TIME = 600
-                _safe_print(f"  {C_BRIGHT_GREEN}✓ Normal mode: 25 rounds, 10min max{C_RESET}")
+                agent.MAX_TOOL_ROUNDS = 100
+                agent.MAX_TOTAL_TIME = 3600
+                _safe_print(f"  {C_BRIGHT_GREEN}✓ Normal mode: 100 rounds, 60min max{C_RESET}")
             else:
                 agent.MAX_TOOL_ROUNDS = 0
                 agent.MAX_TOTAL_TIME = 0
@@ -1800,15 +1804,15 @@ async def run_interactive(session_id: Optional[str] = None, max_rounds: int = 25
                 agent.MAX_TOTAL_TIME = 0
                 _safe_print(f"  {C_BRIGHT_YELLOW}🔄 Persistent ON — will keep working until 'stop'{C_RESET}")
             else:
-                agent.MAX_TOOL_ROUNDS = 25
-                agent.MAX_TOTAL_TIME = 600
-                _safe_print(f"  {C_BRIGHT_GREEN}✓ Persistent OFF — back to 25 rounds{C_RESET}")
+                agent.MAX_TOOL_ROUNDS = 100
+                agent.MAX_TOTAL_TIME = 3600
+                _safe_print(f"  {C_BRIGHT_GREEN}✓ Persistent OFF — back to 100 rounds{C_RESET}")
             continue
         if lower == "stop" and _persistent_mode:
             _persistent_mode = False
-            agent.MAX_TOOL_ROUNDS = 25
-            agent.MAX_TOTAL_TIME = 600
-            _safe_print(f"  {C_BRIGHT_GREEN}✓ Stopped. Normal mode: 25 rounds{C_RESET}")
+            agent.MAX_TOOL_ROUNDS = 100
+            agent.MAX_TOTAL_TIME = 3600
+            _safe_print(f"  {C_BRIGHT_GREEN}✓ Stopped. Normal mode: 100 rounds{C_RESET}")
             continue
         if lower == "config":
             _show_config()
@@ -1897,9 +1901,9 @@ async def run_interactive(session_id: Optional[str] = None, max_rounds: int = 25
                     follow_up = "Continua con la tarea. Si terminaste, dime que esta listo."
                 if follow_up.lower() in ("stop", "parar", "detener", "exit"):
                     _persistent_mode = False
-                    agent.MAX_TOOL_ROUNDS = 25
-                    agent.MAX_TOTAL_TIME = 600
-                    _safe_print(f"  {C_BRIGHT_GREEN}✓ Persistent stopped. Back to 25 rounds.{C_RESET}")
+                    agent.MAX_TOOL_ROUNDS = 100
+                    agent.MAX_TOTAL_TIME = 3600
+                    _safe_print(f"  {C_BRIGHT_GREEN}✓ Persistent stopped. Back to 100 rounds.{C_RESET}")
                     break
                 _save_history()
                 await process_streaming(agent, follow_up, sid)
@@ -1930,7 +1934,7 @@ def main():
     )
     parser.add_argument("query", nargs="*", help="Direct query (non-interactive)")
     parser.add_argument("-s", "--session", help="Session ID to resume")
-    parser.add_argument("-r", "--max-rounds", type=int, default=25)
+    parser.add_argument("-r", "--max-rounds", type=int, default=50)
     parser.add_argument("-t", "--max-time", type=int, default=600)
     parser.add_argument("-u", "--unlimited", action="store_true")
     parser.add_argument("-p", "--persistent", action="store_true")
