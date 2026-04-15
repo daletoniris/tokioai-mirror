@@ -94,6 +94,16 @@ tokio> _
 
 </div>
 
+### 📸 Capturas en Vivo
+
+<table>
+<tr>
+<td align="center"><img src="docs/demo-images/entity-health-dashboard.png" width="250"/><br/><b>Entity Health Dashboard</b><br/>Vision IA + Datos de Salud + Seguridad</td>
+<td align="center"><img src="docs/demo-images/entity-camera-view.jpg" width="250"/><br/><b>Cámara Entity (Hailo AI)</b><br/>Detección de objetos en tiempo real @ 25 FPS</td>
+<td align="center"><img src="docs/demo-images/drone-aerial-snapshot.jpg" width="250"/><br/><b>Vista Aérea del Drone</b><br/>Snapshot del Tello durante patrulla autónoma</td>
+</tr>
+</table>
+
 ---
 
 ## Filosofia

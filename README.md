@@ -158,6 +158,16 @@ tokio> connect the drone, take off, patrol in a square, and land
 
 </div>
 
+### 📸 Live Screenshots
+
+<table>
+<tr>
+<td align="center"><img src="docs/demo-images/entity-health-dashboard.png" width="250"/><br/><b>Entity Health Dashboard</b><br/>AI Vision + Health Data + Security</td>
+<td align="center"><img src="docs/demo-images/entity-camera-view.jpg" width="250"/><br/><b>Entity Camera (Hailo AI)</b><br/>Real-time object detection @ 25 FPS</td>
+<td align="center"><img src="docs/demo-images/drone-aerial-snapshot.jpg" width="250"/><br/><b>Drone Aerial View</b><br/>Tello snapshot during autonomous patrol</td>
+</tr>
+</table>
+
 ---
 
 ## Philosophy
