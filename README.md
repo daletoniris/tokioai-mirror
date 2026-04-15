@@ -382,23 +382,20 @@ Real-time health tracking with two data sources:
 
 ### Real measurements from Accu-Answer iSaw 4-in-1
 
-<p align="center">
-<img src="docs/health-monitoring/images/accu-answer-glucose-100.jpg" alt="Glucose 100 mg/dL" width="160">
-<img src="docs/health-monitoring/images/accu-answer-cholesterol-103.jpg" alt="Cholesterol 103 mg/dL" width="160">
-<img src="docs/health-monitoring/images/accu-answer-hemoglobin-12.5.jpg" alt="Hemoglobin 12.5 g/dL" width="160">
-<img src="docs/health-monitoring/images/accu-answer-uric-acid-3.42.jpg" alt="Uric Acid 3.42 mg/dL" width="160">
-</p>
+<table>
+<tr>
+<td align="center"><img src="docs/health-monitoring/images/accu-answer-glucose-100.jpg" width="160"><br><b>🔵 Glucose</b><br>100 mg/dL 🟢</td>
+<td align="center"><img src="docs/health-monitoring/images/accu-answer-cholesterol-103.jpg" width="160"><br><b>🟣 Cholesterol</b><br>103 mg/dL 🟢</td>
+<td align="center"><img src="docs/health-monitoring/images/accu-answer-hemoglobin-12.5.jpg" width="160"><br><b>🔴 Hemoglobin</b><br>12.5 g/dL 🟢</td>
+<td align="center"><img src="docs/health-monitoring/images/accu-answer-uric-acid-3.42.jpg" width="160"><br><b>🟠 Uric Acid</b><br>3.42 mg/dL 🟢</td>
+</tr>
+</table>
 
-| Metric | Value | Status |
-|--------|-------|:------:|
-| 🔵 Glucose | 100 mg/dL | 🟢 Normal |
-| 🟣 Cholesterol | 103 mg/dL | 🟢 Excellent (was 250!) |
-| 🔴 Hemoglobin | 12.5 g/dL | 🟢 Normal |
-| 🟠 Uric Acid | 3.42 mg/dL | 🟢 Normal |
+> 🏆 **Key achievement**: Cholesterol reduced from **250 → 103 mg/dL** (-58.8%) without statins, through diet and lifestyle changes tracked by TokioAI.
 
 ### Entity Health Dashboard (Live)
 
-<img src="docs/health-monitoring/images/entity-health-dashboard.jpg" alt="TokioAI Entity — Health Dashboard showing real-time vitals and lab results" width="700">
+<img src="docs/health-monitoring/images/entity-health-dashboard.png" alt="TokioAI Entity — Health Dashboard showing real-time vitals and lab results" width="700">
 
 *The Entity displays real-time vitals from the BLE smartwatch and lab results from the Accu-Answer iSaw, all on the Raspberry Pi 5 screen.*
 

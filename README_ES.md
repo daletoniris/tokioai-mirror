@@ -306,23 +306,20 @@ Monitoreo de salud en tiempo real con dos fuentes de datos:
 
 ### Mediciones reales con Accu-Answer iSaw 4-in-1
 
-<p align="center">
-<img src="docs/health-monitoring/images/accu-answer-glucose-100.jpg" alt="Glucosa 100 mg/dL" width="160">
-<img src="docs/health-monitoring/images/accu-answer-cholesterol-103.jpg" alt="Colesterol 103 mg/dL" width="160">
-<img src="docs/health-monitoring/images/accu-answer-hemoglobin-12.5.jpg" alt="Hemoglobina 12.5 g/dL" width="160">
-<img src="docs/health-monitoring/images/accu-answer-uric-acid-3.42.jpg" alt="Ácido Úrico 3.42 mg/dL" width="160">
-</p>
+<table>
+<tr>
+<td align="center"><img src="docs/health-monitoring/images/accu-answer-glucose-100.jpg" width="160"><br><b>🔵 Glucosa</b><br>100 mg/dL 🟢</td>
+<td align="center"><img src="docs/health-monitoring/images/accu-answer-cholesterol-103.jpg" width="160"><br><b>🟣 Colesterol</b><br>103 mg/dL 🟢</td>
+<td align="center"><img src="docs/health-monitoring/images/accu-answer-hemoglobin-12.5.jpg" width="160"><br><b>🔴 Hemoglobina</b><br>12.5 g/dL 🟢</td>
+<td align="center"><img src="docs/health-monitoring/images/accu-answer-uric-acid-3.42.jpg" width="160"><br><b>🟠 Ácido Úrico</b><br>3.42 mg/dL 🟢</td>
+</tr>
+</table>
 
-| Métrica | Valor | Estado |
-|---------|-------|:------:|
-| 🔵 Glucosa | 100 mg/dL | 🟢 Normal |
-| 🟣 Colesterol | 103 mg/dL | 🟢 Excelente (¡era 250!) |
-| 🔴 Hemoglobina | 12.5 g/dL | 🟢 Normal |
-| 🟠 Ácido Úrico | 3.42 mg/dL | 🟢 Normal |
+> 🏆 **Logro clave**: Colesterol reducido de **250 → 103 mg/dL** (-58.8%) sin estatinas, mediante dieta y cambios de estilo de vida monitoreados por TokioAI.
 
 ### Entity Health Dashboard (En vivo)
 
-<img src="docs/health-monitoring/images/entity-health-dashboard.jpg" alt="TokioAI Entity — Dashboard de salud mostrando signos vitales y resultados de laboratorio en tiempo real" width="700">
+<img src="docs/health-monitoring/images/entity-health-dashboard.png" alt="TokioAI Entity — Dashboard de salud mostrando signos vitales y resultados de laboratorio en tiempo real" width="700">
 
 *El Entity muestra signos vitales en tiempo real del smartwatch BLE y resultados de laboratorio del Accu-Answer iSaw, todo en la pantalla de la Raspberry Pi 5.*
 
