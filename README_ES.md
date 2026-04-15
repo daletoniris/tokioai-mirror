@@ -94,6 +94,16 @@ tokio> _
 
 </div>
 
+### 🎥 Entity Demo en Vivo (GIF)
+
+<div align="center">
+
+<img src="docs/demo-images/entity-demo.gif" width="400" alt="TokioAI Entity - Demo en Vivo"/>
+
+**Entity corriendo en Raspberry Pi 5** — Vision IA (Hailo-8L @ 25 FPS) + Dashboard de Salud + Robot PiCar-X moviéndose en tiempo real
+
+</div>
+
 ### 📸 Capturas en Vivo
 
 <table>

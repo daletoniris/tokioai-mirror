@@ -158,6 +158,16 @@ tokio> connect the drone, take off, patrol in a square, and land
 
 </div>
 
+### 🎥 Entity Live Demo (GIF)
+
+<div align="center">
+
+<img src="docs/demo-images/entity-demo.gif" width="400" alt="TokioAI Entity - Live Demo"/>
+
+**Entity running on Raspberry Pi 5** — AI Vision (Hailo-8L @ 25 FPS) + Health Dashboard + PiCar-X robot moving in real-time
+
+</div>
+
 ### 📸 Live Screenshots
 
 <table>
